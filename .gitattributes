@@ -1,0 +1,13 @@
+# Keep these LF in the repository no matter what the committer's platform is.
+# A CRLF shebang or Dockerfile breaks the container build / shell scripts
+# (`/bin/sh^M`, `--port "8000^M"`), and this project is developed on Windows
+# where core.autocrlf is often true.
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.dockerfile    text eol=lf
+docker-compose* text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+Makefile        text eol=lf
+*.py            text eol=lf
+*.ini           text eol=lf

@@ -30,5 +30,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 
 # Apply schema migrations, then serve. AUTO_CREATE_SCHEMA is false in the
 # container so Alembic (not create_all) is the single source of schema truth.
-CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app \
-      --host 0.0.0.0 --port \"${PORT:-8000}\" --proxy-headers --forwarded-allow-ips '*'" ]
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port \"${PORT:-8000}\" --proxy-headers --forwarded-allow-ips '*'"]
