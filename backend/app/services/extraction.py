@@ -75,6 +75,49 @@ CLAIM_KEYWORDS = (
 )
 
 
+# A "Company:" value normally ends at the line break, but a posting may put
+# several fields on one line (the README's own example). These labels are the
+# fields that can follow the name, and the boundary pattern below cuts the
+# capture at the first one — or at a sentence end, a hard separator, or an
+# amount of money.
+COMPANY_FIELD_LABELS = (
+    "role", "position", "job title", "designation", "profile", "website",
+    "location", "salary", "stipend", "ctc", "package", "eligibility",
+    "selection process", "process", "apply", "contact", "email", "phone",
+    "qualification", "requirements", "responsibilities", "duration",
+    "deadline", "batch", "posted",
+)
+COMPANY_NAME_BOUNDARY_RE = re.compile(
+    r"(?:"
+    # a following field label ("Role:", "Apply here:", "Website -")
+    r"\b(?:" + "|".join(COMPANY_FIELD_LABELS) + r")\b(?:\s+[A-Za-z]+){0,2}\s*[:\-–]"
+    # the end of a sentence — but not the dot of an abbreviation inside a name
+    r"|(?<=\w{3})[.!?]\s+"
+    r"(?!(?:ltd|limited|inc|incorporated|corp|corporation|llc|pvt|private|co|"
+    r"plc|llp|gmbh)\b)(?=[A-Za-z0-9])"
+    # a hard separator, or an amount of money ("Pay Rs 1,500", "₹2,000")
+    r"|[;|•\t]"
+    r"|\b(?:pay|paid|pays|paying|charge|charged|send|sent|transfer|transferred|"
+    r"deposit|deposited)?\s*(?:rs\.?|inr|₹)\s*[\d,]+"
+    r")",
+    re.IGNORECASE,
+)
+# Abbreviations that keep their dot when a sentence happens to end right after
+# them: "Cache Serve Ltd. Please review…" is still "Cache Serve Ltd.".
+LEGAL_SUFFIX_TOKENS = {
+    "ltd", "limited", "inc", "incorporated", "corp", "corporation", "llc",
+    "l.l.c", "co", "pvt", "private", "plc", "llp", "gmbh",
+}
+# Words that can trail a cut name once its sentence was removed ("ABC
+# Technologies asked for a " + "Rs 1,500"). Only stripped *after* a boundary was
+# found, so a name that ends in one of them on its own ("Samsung Pay") is safe.
+COMPANY_TRAILING_NOISE = {
+    "a", "an", "and", "are", "ask", "asked", "asking", "at", "called",
+    "contacted", "for", "from", "i", "in", "is", "it", "me", "my", "of",
+    "on", "or", "our", "pay", "paid", "paying", "said", "sent", "then",
+    "they", "to", "told", "us", "was", "we", "were", "with",
+}
+
 # "Levroxen LLC", "Acme Pvt Ltd", "Foo Inc." at the start of a line/title.
 LEGAL_ENTITY_RE = re.compile(
     r"^((?:[A-Z][\w&.'\-]*\s+){0,4}(?:LLC|L\.L\.C|Ltd|Limited|Inc|Incorporated|Corp|Corporation|"
@@ -83,10 +126,35 @@ LEGAL_ENTITY_RE = re.compile(
 )
 
 
+def _trim_company_name(value: str) -> str:
+    """Cut a captured company value at the first field or sentence boundary.
+
+    The capture after "Company:" used to run to the end of the line, so a
+    posting with several fields on one line produced the whole sentence as the
+    company name ("ABC Technologies. Selected on WhatsApp without interview…").
+    That name then keyed the topic filter, the search queries and the stored
+    company record, so it has to be the name and nothing else.
+    """
+    match = COMPANY_NAME_BOUNDARY_RE.search(value)
+    if not match:
+        return value.strip(" \t-–—,;:|")
+
+    head = value[: match.start()]
+    words = head.split()
+    # Keep the dot of a legal suffix the sentence ended on.
+    if value.startswith(".", match.start()) and words and words[-1].lower() in LEGAL_SUFFIX_TOKENS:
+        head += "."
+        words = head.split()
+
+    while words and words[-1].lower().strip(".,;:!?'\"()") in COMPANY_TRAILING_NOISE:
+        words.pop()
+    return " ".join(words).strip(" \t-–—,;:|")
+
+
 def _find_company_name(text: str) -> str | None:
     match = COMPANY_LINE_RE.search(text)
     if match:
-        return match.group(1).strip().splitlines()[0][:120]
+        return _trim_company_name(match.group(1).strip().splitlines()[0])[:120]
 
     # A legal-entity suffix on the first line is a strong company-name cue
     # (e.g. "Levroxen LLC - Online Assessment Registration").
@@ -102,7 +170,7 @@ def _find_company_name(text: str) -> str | None:
     ):
         m = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
         if m:
-            return m.group(1).strip()[:120]
+            return _trim_company_name(m.group(1).strip())[:120]
     return None
 
 

@@ -53,6 +53,32 @@ async def test_queries_endpoint_returns_plan(client: httpx.AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_queries_endpoint_extracts_a_one_line_posting(client: httpx.AsyncClient) -> None:
+    """A posting whose fields share one line must still name the company.
+
+    The same posting on one line is the shape the README documents, so the
+    stage-1 plan must be built from "ABC Technologies" and not from the whole
+    sentence — the name keys the topic filter and the search queries, so a
+    sentence leaking in misdirects the investigation.
+    """
+    one_line = (
+        "Company: ABC Technologies. Selected on WhatsApp without interview. "
+        "Pay Rs 1,500 registration fee. Website: abc-careers.xyz"
+    )
+    response = await client.post("/api/queries", json={"text": one_line})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["input"]["company"]["name"] == "ABC Technologies"
+    assert body["input"]["money_request"]["detected"] is True
+    # The queries are actually built from the name — the point of the fix.
+    assert any(
+        "ABC Technologies" in query
+        for group in body["queries"]
+        for query in group["queries"]
+    )
+
+
+@pytest.mark.asyncio
 async def test_investigate_with_evidence_uses_provided_pages(client: httpx.AsyncClient) -> None:
     payload = {
         "text": SCAM_TEXT,

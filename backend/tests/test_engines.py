@@ -655,6 +655,56 @@ def test_legal_entity_company_name_is_extracted() -> None:
     assert user_input.company.name == "Levroxen LLC"
 
 
+def test_company_name_when_fields_share_one_line() -> None:
+    """A single-line posting must yield the company name, not the sentence.
+
+    Regression: the capture after "Company:" ran to the end of the line, so the
+    README's one-line example produced "ABC Technologies. Selected on WhatsApp
+    without interview. Pay Rs 1,500 registration fee. Website:
+    abc-careers.xyz" as the company name. That name keys the topic filter, the
+    search queries and the stored company record, so the whole sentence leaking
+    in misdirects the investigation itself.
+    """
+    sentence = heuristic_extract(
+        "Company: ABC Technologies. Selected on WhatsApp without interview. "
+        "Pay Rs 1,500 registration fee. Website: abc-careers.xyz"
+    )
+    assert sentence.company.name == "ABC Technologies"
+
+    # The same, with the fields separated by labels rather than full stops.
+    labelled = heuristic_extract(
+        "Company: ABC Technologies Role: AI Intern Website: abc-careers.xyz"
+    )
+    assert labelled.company.name == "ABC Technologies"
+
+    # No punctuation at all: the money marker still ends the name.
+    unpunctuated = heuristic_extract(
+        "Company: ABC Technologies Pay Rs 1,500 Registration Fee"
+    )
+    assert unpunctuated.company.name == "ABC Technologies"
+
+    # A dotted legal name is not a sentence boundary.
+    dotted = heuristic_extract("Company: Acme Pvt. Ltd.\nRole: Analyst")
+    assert dotted.company.name == "Acme Pvt. Ltd."
+
+    # A sentence that follows a legal suffix still ends the name, and the
+    # suffix keeps its dot.
+    after_suffix = heuristic_extract(
+        "Company: Cache Serve Ltd. Please review this posting."
+    )
+    assert after_suffix.company.name == "Cache Serve Ltd."
+
+    # A name that merely ends in a cut word is left alone: no boundary is hit.
+    assert heuristic_extract("Company: Samsung Pay").company.name == "Samsung Pay"
+
+    # The multi-line shape keeps working unchanged.
+    multi_line = heuristic_extract(
+        "Company: ABC Technologies\n"
+        "They asked for a Rs 1,500 registration fee. Website: abc-careers.xyz"
+    )
+    assert multi_line.company.name == "ABC Technologies"
+
+
 def test_company_pages_are_not_filtered_out_by_a_platform_domain() -> None:
     """The topic filter must key on the company name, not a linked platform.
 
