@@ -31,6 +31,8 @@
           <summary>Settings</summary>
           <label class="label" for="api-base">Backend API base</label>
           <input id="api-base" type="text" spellcheck="false" />
+          <label class="label" for="site-url">Site URL (used for sign-in)</label>
+          <input id="site-url" type="text" spellcheck="false" placeholder="https://your-site.vercel.app" />
           <label class="label" for="provider">Search provider</label>
           <select id="provider">
             <option value="duckduckgo">DuckDuckGo (free, no key)</option>
@@ -68,6 +70,18 @@
         </div>
         <div class="quota-bar"><div id="quota-fill" class="quota-fill"></div></div>
         <p id="quota-note" class="quota-note muted"></p>
+      </section>
+
+      <section id="account" class="card account" hidden>
+        <div class="account-row">
+          <span class="account-label">Signed in</span>
+          <span id="account-email" class="account-email"></span>
+        </div>
+        <div class="account-actions">
+          <button id="my-reports-toggle" class="ghost" type="button">My reports</button>
+          <button id="sign-out" class="ghost" type="button">Sign out</button>
+        </div>
+        <div id="my-reports" class="my-reports" hidden></div>
       </section>
 
       <section id="progress" class="progress" hidden aria-live="polite">

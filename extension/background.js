@@ -134,6 +134,48 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
+const SESSION_KEY = "session";
+
+/**
+ * Store a session handed over by our own website.
+ *
+ * Reporting a scam requires a signed-in user, but the extension has no OAuth
+ * flow of its own: the site signs the user in (Google, via Neon Auth) and pushes
+ * the short-lived JWT here. The side panel then posts reports with it as a
+ * bearer token, and stores the identity so it can show whose account it is.
+ */
+async function storeExternalSession(message, sender) {
+  const origin = sender?.origin;
+  if (origin && !ALLOWED_EXTERNAL_ORIGIN.test(origin)) {
+    return { ok: false, error: "origin not allowed" };
+  }
+  const token = typeof message.token === "string" ? message.token : "";
+  const user = message.user || {};
+  if (!token || !user.id) {
+    return { ok: false, error: "incomplete session" };
+  }
+  await chrome.storage.local.set({
+    [SESSION_KEY]: {
+      token,
+      user: {
+        id: String(user.id),
+        email: user.email || null,
+        name: user.name || null,
+      },
+      receivedAt: Date.now(),
+    },
+  });
+  return { ok: true };
+}
+
+chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
+  if (message?.type !== "AUTH_SESSION") return false;
+  storeExternalSession(message, sender)
+    .then(sendResponse)
+    .catch((err) => sendResponse({ ok: false, error: String(err?.message || err) }));
+  return true; // keep the channel open for the async reply
+});
+
 // A web page (our own site) drives a run over a Port so it can receive progress
 // and the final verdict. Ports keep this service worker alive while connected.
 chrome.runtime.onConnectExternal.addListener((port) => {

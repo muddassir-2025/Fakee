@@ -94,6 +94,15 @@ export interface RiskAssessment {
 export interface InvestigationResult {
   id: string;
   cached?: boolean;
+  /**
+   * The structured reading of the pasted text, as the API returns it. The
+   * extension forwards the whole response, so the site can name the company in
+   * a report without extracting it again.
+   */
+  input?: {
+    company?: { name?: string | null; website?: string | null } | null;
+    opportunity?: { title?: string | null; type?: string | null } | null;
+  } | null;
   investigation?: {
     coverage?: EvidenceCoverage;
     notable_findings?: string[];

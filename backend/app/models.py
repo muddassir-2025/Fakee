@@ -194,7 +194,31 @@ class ResponseCache(Base):
     )
 
 
+# Report lifecycle. ``pending``/``approved`` both count towards a company's
+# history (a fresh report should warn the next applicant immediately);
+# ``rejected`` by an admin and ``withdrawn`` by the reporter it does not.
+REPORT_STATUS_PENDING = "pending"
+REPORT_STATUS_APPROVED = "approved"
+REPORT_STATUS_REJECTED = "rejected"
+REPORT_STATUS_WITHDRAWN = "withdrawn"
+REPORT_STATUSES: tuple[str, ...] = (
+    REPORT_STATUS_PENDING,
+    REPORT_STATUS_APPROVED,
+    REPORT_STATUS_REJECTED,
+    REPORT_STATUS_WITHDRAWN,
+)
+# Statuses that feed the historical-report signal in the risk engine.
+REPORT_STATUSES_COUNTED: tuple[str, ...] = (REPORT_STATUS_PENDING, REPORT_STATUS_APPROVED)
+
+
 class UserReport(Base):
+    """A scam report filed by a signed-in user.
+
+    Reports are the only user-generated rows the product keeps, so they carry
+    enough identity for the admin dashboard (who filed it) and enough state for
+    the reporter to see and withdraw their own submission.
+    """
+
     __tablename__ = "user_reports"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
@@ -207,6 +231,30 @@ class UserReport(Base):
     report_type: Mapped[str] = mapped_column(String(64), default="user_report")
     description: Mapped[str] = mapped_column(Text)
     source: Mapped[str] = mapped_column(String(128), default="self_reported")
+
+    # --- Who filed it (Neon Auth identity) ---
+    user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    user_email: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    user_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # --- What was reported (denormalized so the admin list needs no joins) ---
+    company_name: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    # The verdict the reporter was looking at when they filed it.
+    risk_level: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    risk_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # --- Review state ---
+    status: Mapped[str] = mapped_column(
+        String(16), default=REPORT_STATUS_PENDING, index=True
+    )
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
     )

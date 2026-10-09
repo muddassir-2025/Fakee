@@ -309,10 +309,97 @@ class InvestigationSummary(BaseModel):
     risk_score: int
 
 
+ReportStatus = Literal["pending", "approved", "rejected", "withdrawn"]
+
+
 class ReportRequest(BaseModel):
     text: str = Field(min_length=3, max_length=20000)
     report_type: str = "user_report"
     source: str = "self_reported"
+    # Optional context from the verdict the reporter was looking at; the admin
+    # dashboard shows it so a report can be judged against what was on screen.
+    company_name: str | None = Field(default=None, max_length=255)
+    risk_level: RiskLevel | None = None
+    risk_score: int | None = Field(default=None, ge=0, le=100)
+
+
+class ReportOut(BaseModel):
+    """A report as its own author sees it."""
+
+    id: str
+    created_at: datetime
+    updated_at: datetime | None = None
+    status: ReportStatus
+    report_type: str
+    source: str
+    company_id: str | None = None
+    company_name: str | None = None
+    description: str
+    risk_level: str | None = None
+    risk_score: int | None = None
+    review_note: str | None = None
+    reviewed_at: datetime | None = None
+
+
+class AdminReportOut(ReportOut):
+    """A report as an administrator sees it: plus who filed it."""
+
+    user_id: str | None = None
+    user_email: str | None = None
+    user_name: str | None = None
+    reviewed_by: str | None = None
+
+
+class UserProfile(BaseModel):
+    id: str
+    email: str | None = None
+    name: str | None = None
+    email_verified: bool = False
+    is_admin: bool = False
+
+
+class MyReports(BaseModel):
+    user: UserProfile
+    reports: list[ReportOut] = Field(default_factory=list)
+    counts: dict[str, int] = Field(default_factory=dict)
+
+
+class AdminReports(BaseModel):
+    reports: list[AdminReportOut] = Field(default_factory=list)
+    counts: dict[str, int] = Field(default_factory=dict)
+    total: int = 0
+    limit: int = 0
+    offset: int = 0
+
+
+class ReportReviewRequest(BaseModel):
+    """An admin decision, or a return to the queue (``reset``)."""
+
+    action: Literal["approve", "reject", "reset"]
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class ReportReviewResponse(BaseModel):
+    id: str
+    status: ReportStatus
+    review_note: str | None = None
+    reviewed_by: str | None = None
+    reviewed_at: datetime | None = None
+    detail: str = ""
+
+
+class AdminOverview(BaseModel):
+    """The headline numbers on the admin dashboard."""
+
+    reports: dict[str, int] = Field(default_factory=dict)
+    investigations: int = 0
+    companies: int = 0
+    users_reporting: int = 0
+    reports_last_7_days: int = 0
+    by_risk_level: dict[str, int] = Field(default_factory=dict)
+    top_companies: list[dict] = Field(default_factory=list)
+    admins: list[str] = Field(default_factory=list)
+    auth_configured: bool = False
 
 
 # --------------------------------------------------------------------------

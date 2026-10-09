@@ -10,20 +10,29 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..auth import AuthUser, get_current_user, require_admin
 from ..config import settings
 from ..db import get_session, ping_db
+from ..models import REPORT_STATUSES
 from ..services import metrics
 from .ratelimit import limit_investigations, limit_queries, limit_reports
 from ..schemas import (
+    AdminOverview,
+    AdminReports,
     AnalystRequest,
     AnalystResponse,
     EvidenceInvestigationRequest,
     InvestigationRequest,
     InvestigationResponse,
     InvestigationSummary,
+    MyReports,
     QueryPlan,
     QueryRequest,
+    ReportOut,
     ReportRequest,
+    ReportReviewRequest,
+    ReportReviewResponse,
+    UserProfile,
 )
 from ..services.exa import results_from_pages
 from ..services.evidence import structure_evidence
@@ -33,10 +42,18 @@ from ..services.patterns import pattern_metadata
 from ..services.pipeline import run_investigation
 from ..services.query_builder import build_queries
 from ..services.repository import (
+    admin_overview,
+    admin_report_out,
+    count_reports_by_status,
     create_user_report,
     get_investigation,
     get_stats,
+    list_admin_reports,
     list_investigations,
+    list_user_reports,
+    report_out,
+    review_user_report,
+    withdraw_user_report,
 )
 
 logger = logging.getLogger(__name__)
@@ -227,19 +244,183 @@ async def get_one(
     )
 
 
-@router.post("/reports", dependencies=[Depends(limit_reports)])
+# ------------------------------------------------------------------- reports
+# Reporting a scam is a write about a named business, so it requires a signed-in
+# user. Investigations stay anonymous and free.
+
+
+def _profile(user: AuthUser) -> UserProfile:
+    return UserProfile(
+        id=user.id,
+        email=user.email,
+        name=user.display_name,
+        email_verified=user.email_verified,
+        is_admin=user.is_admin,
+    )
+
+
+@router.post(
+    "/reports",
+    response_model=ReportOut,
+    dependencies=[Depends(limit_reports)],
+)
 async def submit_report(
     payload: ReportRequest,
+    user: AuthUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> dict:
+) -> ReportOut:
+    """File a scam report, attributed to the signed-in user."""
     report = await create_user_report(
         session,
         text=payload.text.strip(),
         report_type=payload.report_type,
         source=payload.source,
+        user_id=user.id,
+        user_email=user.email,
+        user_name=user.display_name,
+        company_name=payload.company_name,
+        risk_level=payload.risk_level,
+        risk_score=payload.risk_score,
     )
     metrics.inc("user_reports", {"report_type": payload.report_type})
-    return {"id": report.id, "status": "stored"}
+    return report_out(report)
+
+
+@router.get("/reports/mine", response_model=MyReports)
+async def my_reports(
+    user: AuthUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MyReports:
+    """The signed-in user's own reports and their review status."""
+    rows = await list_user_reports(session, user.id)
+    return MyReports(
+        user=_profile(user),
+        reports=[report_out(row) for row in rows],
+        counts=await count_reports_by_status(session, user_id=user.id),
+    )
+
+
+@router.post("/reports/{report_id}/withdraw", response_model=ReportReviewResponse)
+async def withdraw_report(
+    report_id: str,
+    user: AuthUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ReportReviewResponse:
+    """Take back one of your own reports."""
+    # The error code decides the status: a non-owner also comes back with no
+    # report, and leaking "not found" for someone else's report would be a
+    # misleading (and less useful) answer than an honest 403.
+    report, error = await withdraw_user_report(session, report_id, user_id=user.id)
+    if error == "not_found":
+        raise HTTPException(status_code=404, detail="Report not found.")
+    if error == "not_owner":
+        raise HTTPException(status_code=403, detail="That report belongs to another account.")
+    if report is None:  # defensive: unreachable while the codes above stay exhaustive
+        raise HTTPException(status_code=404, detail="Report not found.")
+    if error == "rejected":
+        raise HTTPException(
+            status_code=409,
+            detail="An administrator has already reviewed this report; it cannot be withdrawn.",
+        )
+    detail = (
+        "You had already withdrawn this report."
+        if error == "already_withdrawn"
+        else "Report withdrawn. It no longer counts towards this company's history."
+    )
+    return ReportReviewResponse(
+        id=report.id,
+        status=report.status,
+        review_note=report.review_note,
+        reviewed_by=report.reviewed_by,
+        reviewed_at=report.reviewed_at,
+        detail=detail,
+    )
+
+
+# -------------------------------------------------------------------- admin
+
+
+@router.get("/admin/reports", response_model=AdminReports)
+async def admin_list_reports(
+    status_filter: str | None = Query(default=None, alias="status"),
+    q: str | None = Query(default=None, max_length=200),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    admin: AuthUser = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> AdminReports:
+    """Every report with its reporter and review state."""
+    if status_filter and status_filter not in REPORT_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown status {status_filter!r}. Expected one of {', '.join(REPORT_STATUSES)}.",
+        )
+    rows, total = await list_admin_reports(
+        session,
+        status_filter=status_filter,
+        query=q,
+        limit=limit,
+        offset=offset,
+    )
+    return AdminReports(
+        reports=[admin_report_out(row) for row in rows],
+        counts=await count_reports_by_status(session),
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post("/admin/reports/{report_id}/review", response_model=ReportReviewResponse)
+async def admin_review_report(
+    report_id: str,
+    payload: ReportReviewRequest,
+    admin: AuthUser = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> ReportReviewResponse:
+    """Accept, reject, or return a report to the queue."""
+    report, error = await review_user_report(
+        session,
+        report_id,
+        action=payload.action,
+        note=payload.note,
+        admin_email=admin.email,
+    )
+    if error == "not_found" or report is None:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    if error == "withdrawn":
+        raise HTTPException(
+            status_code=409,
+            detail="The reporter withdrew this report; there is nothing left to review.",
+        )
+    metrics.inc("report_reviews", {"action": payload.action})
+    detail = {
+        "approve": "Accepted. The report counts towards this company's history.",
+        "reject": "Rejected. The report is excluded from this company's history.",
+        "reset": "Returned to the review queue.",
+    }[payload.action]
+    return ReportReviewResponse(
+        id=report.id,
+        status=report.status,
+        review_note=report.review_note,
+        reviewed_by=report.reviewed_by,
+        reviewed_at=report.reviewed_at,
+        detail=detail,
+    )
+
+
+@router.get("/admin/overview", response_model=AdminOverview)
+async def admin_dashboard(
+    admin: AuthUser = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+) -> AdminOverview:
+    """Headline numbers for the admin dashboard."""
+    overview = await admin_overview(session)
+    return AdminOverview(
+        **overview,
+        admins=settings.admin_email_list,
+        auth_configured=settings.auth_configured,
+    )
 
 
 @router.get("/groq/quota")

@@ -47,6 +47,28 @@ class Settings(BaseSettings):
     # CORS credentials require explicit origins; disabled when origins is "*".
     cors_allow_credentials: bool = True
 
+    # --- Authentication (Neon Auth, a.k.a. Managed Better Auth) ---
+    # The auth base URL from the Neon console, e.g.
+    #   https://ep-xxx.neonauth.us-east-2.aws.neon.build/neondb/auth
+    # Leave empty to run without sign-in (reporting is then refused, see
+    # ``auth_configured``). The frontend's VITE_NEON_AUTH_URL must point at the
+    # same value.
+    neon_auth_base_url: str | None = None
+    # Optional explicit JWKS URL. Defaults to <base>/.well-known/jwks.json.
+    neon_auth_jwks_url: str | None = None
+    # Optional explicit expected issuer. Defaults to the origin of the auth URL
+    # (Managed Better Auth sets `iss` to the auth origin) plus the full base URL.
+    neon_auth_issuer: str | None = None
+    # How long fetched signing keys are cached before a re-fetch (seconds).
+    neon_auth_jwks_cache_seconds: int = 3600
+    # Emails allowed into the admin dashboard (comma-separated).
+    admin_emails: str = "studymuddassir@gmail.com"
+    # Hold new reports for review, or count them immediately.
+    #   false (default): a report counts towards a company's history as soon as
+    #     it is filed; the admin can still reject it, which removes it.
+    #   true: nothing counts until the admin accepts it.
+    reports_require_approval: bool = False
+
     # --- Database (Neon PostgreSQL in production, SQLite locally) ---
     # e.g. postgresql+asyncpg://user:pass@host/db?ssl=require
     database_url: str = "sqlite+aiosqlite:///./data/investigations.db"
@@ -161,6 +183,47 @@ class Settings(BaseSettings):
     @property
     def is_sqlite(self) -> bool:
         return self.database_url.startswith("sqlite")
+
+    # --- Auth helpers -----------------------------------------------------
+
+    @property
+    def auth_configured(self) -> bool:
+        """True when a Neon Auth project has been wired up."""
+        return bool((self.neon_auth_base_url or "").strip() or (self.neon_auth_jwks_url or "").strip())
+
+    @property
+    def jwks_url(self) -> str:
+        """Where the public signing keys are published."""
+        if self.neon_auth_jwks_url:
+            return self.neon_auth_jwks_url.strip()
+        return f"{(self.neon_auth_base_url or '').strip().rstrip('/')}/.well-known/jwks.json"
+
+    @property
+    def accepted_issuers(self) -> list[str]:
+        """Token issuers we accept.
+
+        Managed Better Auth sets ``iss`` to the *origin* of the auth URL, but the
+        documented examples also show the full base URL, so both are accepted.
+        ``NEON_AUTH_ISSUER`` overrides the whole list when set.
+        """
+        if self.neon_auth_issuer:
+            return [self.neon_auth_issuer.strip()]
+        base = (self.neon_auth_base_url or self.neon_auth_jwks_url or "").strip()
+        if not base:
+            return []
+        base = base.rstrip("/")
+        if base.endswith("/.well-known/jwks.json"):
+            base = base[: -len("/.well-known/jwks.json")]
+        parts = urlsplit(base)
+        origin = f"{parts.scheme}://{parts.netloc}" if parts.scheme and parts.netloc else ""
+        issuers = [base]
+        if origin and origin not in issuers:
+            issuers.append(origin)
+        return issuers
+
+    @property
+    def admin_email_list(self) -> list[str]:
+        return [e.strip().lower() for e in self.admin_emails.split(",") if e.strip()]
 
     @property
     def sqlalchemy_database_url(self) -> str:

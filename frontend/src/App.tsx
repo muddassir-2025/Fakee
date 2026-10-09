@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   detectExtension,
   extensionIdFromStoreUrl,
@@ -7,6 +7,12 @@ import {
   type ProgressEvent,
 } from "./extensionBridge";
 import { VerdictResult } from "./components/VerdictResult";
+import { AuthMenu } from "./components/AuthMenu";
+import { ReportAction } from "./components/ReportAction";
+import { AdminPage } from "./pages/AdminPage";
+import { ProfilePage } from "./pages/ProfilePage";
+import { useAuth } from "./useAuth";
+import { routeFromHash, useRoute } from "./useHashRoute";
 import {
   EXTENSION,
   GEN_Z_STATS,
@@ -55,11 +61,21 @@ const NAV = [
   { href: "#safety", label: "Safety rules" },
 ];
 
-function Header({ onTryNow }: { onTryNow: (event: React.MouseEvent<HTMLAnchorElement>) => void }) {
+function Header({
+  onTryNow,
+  onNavAnchor,
+}: {
+  onTryNow: (event: React.MouseEvent<HTMLAnchorElement>) => void;
+  onNavAnchor: (event: React.MouseEvent<HTMLAnchorElement>, id: string) => void;
+}) {
   return (
     <header className="sticky top-0 z-40 border-b border-line/70 bg-paper/85 backdrop-blur-md">
-      <Container className="flex h-16 items-center justify-between gap-4 sm:gap-6">
-        <a href="#top" className="flex items-center gap-2.5 text-ink">
+      <Container className="flex h-16 items-center justify-between gap-3 sm:gap-6">
+        <a
+          href="#top"
+          onClick={(event) => onNavAnchor(event, "top")}
+          className="flex shrink-0 items-center gap-2.5 text-ink"
+        >
           <Mark className="h-6 w-6 text-signal" />
           <span className="font-display text-[17px] font-semibold tracking-tight">
             Fakee
@@ -71,6 +87,7 @@ function Header({ onTryNow }: { onTryNow: (event: React.MouseEvent<HTMLAnchorEle
             <a
               key={item.href}
               href={item.href}
+              onClick={(event) => onNavAnchor(event, item.href.slice(1))}
               className="text-sm text-muted transition-colors hover:text-ink"
             >
               {item.label}
@@ -78,19 +95,23 @@ function Header({ onTryNow }: { onTryNow: (event: React.MouseEvent<HTMLAnchorEle
           ))}
         </nav>
 
-        {/*
-          An anchor, so it still works with JS disabled or opened in a new tab.
-          The handler takes the jump over from the browser: navigating to the
-          fragment would move focus off the box we just focused, and doing both
-          here also puts the cursor where the user is about to type.
-        */}
-        <a
-          href="#check"
-          onClick={onTryNow}
-          className="shrink-0 rounded-full bg-signal px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-signal/90"
-        >
-          Try now
-        </a>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <AuthMenu />
+
+          {/*
+            An anchor, so it still works with JS disabled or opened in a new tab.
+            The handler takes the jump over from the browser: navigating to the
+            fragment would move focus off the box we just focused, and doing both
+            here also puts the cursor where the user is about to type.
+          */}
+          <a
+            href="#check"
+            onClick={onTryNow}
+            className="shrink-0 rounded-full bg-signal px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-signal/90"
+          >
+            Try now
+          </a>
+        </div>
       </Container>
     </header>
   );
@@ -632,7 +653,19 @@ function CheckPanel({ onGetExtension }: { onGetExtension: () => void }) {
               </div>
             )}
 
-            {result && <VerdictResult result={result} />}
+            {result && (
+              <>
+                <VerdictResult result={result} />
+                <div className="mt-4">
+                  <ReportAction
+                    text={text.trim()}
+                    companyName={result.input?.company?.name ?? null}
+                    riskLevel={result.risk?.level ?? null}
+                    riskScore={result.risk?.score ?? null}
+                  />
+                </div>
+              </>
+            )}
           </div>
         </div>
       </Container>
@@ -804,33 +837,60 @@ function Footer() {
 /* --------------------------------------------------------------------- app */
 
 export default function App() {
-  const scrollToInstall = () => {
-    document.getElementById("install")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const route = useRoute();
+  const { signIn } = useAuth();
+
+  // The landing sections only exist on the home route, so an anchor click from
+  // /profile or /admin goes home first and scrolls once the sections are back.
+  const goToAnchor = useCallback((id: string, focusId?: string) => {
+    const onHome = routeFromHash(window.location.hash) === "home";
+    const land = () => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      // preventScroll keeps the focus from cancelling the smooth scroll above.
+      if (focusId) document.getElementById(focusId)?.focus({ preventScroll: true });
+    };
+    if (onHome) {
+      land();
+      return;
+    }
+    window.location.hash = "#/";
+    window.setTimeout(land, 80);
+  }, []);
+
+  const onNavAnchor = (event: React.MouseEvent<HTMLAnchorElement>, id: string) => {
+    event.preventDefault();
+    goToAnchor(id);
   };
+
+  const scrollToInstall = () => goToAnchor("install");
 
   // "Try now" lands on the paste box with the cursor in it, so checking a
   // posting is one step instead of scroll-then-find-the-box-then-tap.
   const goToCheck = (event: React.MouseEvent<HTMLAnchorElement>) => {
-    const box = document.getElementById("posting");
-    if (!box) return; // Nothing to aim at — let the browser follow the hash.
     event.preventDefault();
-    document.getElementById("check")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    // preventScroll keeps the focus from cancelling the smooth scroll above.
-    box.focus({ preventScroll: true });
+    goToAnchor("check", "posting");
   };
 
   return (
     <div className="min-h-screen bg-paper">
-      <Header onTryNow={goToCheck} />
+      <Header onTryNow={goToCheck} onNavAnchor={onNavAnchor} />
       <main>
-        <Hero onGetExtension={scrollToInstall} />
-        <Problem />
-        <ScamTypes />
-        <HowItWorks />
-        <Verdict />
-        <CheckPanel onGetExtension={scrollToInstall} />
-        <Safety />
-        <Install />
+        {route === "profile" ? (
+          <ProfilePage onSignInRequest={() => void signIn()} />
+        ) : route === "admin" ? (
+          <AdminPage onSignInRequest={() => void signIn()} />
+        ) : (
+          <>
+            <Hero onGetExtension={scrollToInstall} />
+            <Problem />
+            <ScamTypes />
+            <HowItWorks />
+            <Verdict />
+            <CheckPanel onGetExtension={scrollToInstall} />
+            <Safety />
+            <Install />
+          </>
+        )}
       </main>
       <Footer />
     </div>

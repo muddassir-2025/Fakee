@@ -106,7 +106,13 @@ def test_groq_quota_captures_rate_limit_headers() -> None:
 
 
 @pytest.mark.asyncio
-async def test_submit_scam_report_stores_it(client: httpx.AsyncClient) -> None:
+async def test_submit_scam_report_requires_sign_in(client: httpx.AsyncClient) -> None:
+    """Reporting is a write about a named business, so it needs a signed-in user.
+
+    This suite runs with no auth project configured, so the endpoint fails closed
+    (503). The authenticated path — identity recorded, ownership, admin review —
+    is covered in ``test_reports_auth.py``.
+    """
     response = await client.post(
         "/api/reports",
         json={
@@ -118,10 +124,8 @@ async def test_submit_scam_report_stores_it(client: httpx.AsyncClient) -> None:
             "source": "extension_user",
         },
     )
-    assert response.status_code == 200
-    body = response.json()
-    assert body["status"] == "stored"
-    assert body["id"]
+    assert response.status_code == 503
+    assert (await client.get("/api/reports/mine")).status_code == 503
 
 
 @pytest.mark.asyncio
