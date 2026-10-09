@@ -124,6 +124,28 @@ def test_verify_token_rejects_a_tampered_signature(configured_auth) -> None:
         auth_module.verify_token(f"{head}.{payload}.{signature[:-4]}AAAA")
 
 
+def test_verify_token_rejects_a_malformed_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Garbage must be a 401, not a 500.
+
+    Deliberately *not* the ``configured_auth`` fixture: that one stubs the JWKS
+    client, so key resolution never runs. Through the real client PyJWT raises
+    ``DecodeError`` while parsing the header (a ``PyJWTError`` but not a
+    ``PyJWKClientError``), which used to escape unhandled and surface as an
+    internal server error. Parsing fails before any key fetch, so no network
+    access happens here.
+    """
+    monkeypatch.setattr(settings, "neon_auth_base_url", AUTH_BASE)
+    monkeypatch.setattr(settings, "neon_auth_jwks_url", None)
+    monkeypatch.setattr(settings, "neon_auth_issuer", None)
+    auth_module.reset_jwks_cache()
+    try:
+        for bad in ("not-a-jwt", "a.b.c", ""):
+            with pytest.raises(AuthError):
+                auth_module.verify_token(bad)
+    finally:
+        auth_module.reset_jwks_cache()
+
+
 def test_verify_token_requires_configuration() -> None:
     assert settings.auth_configured is False
     with pytest.raises(AuthError, match="not configured"):

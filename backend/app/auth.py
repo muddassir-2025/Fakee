@@ -30,7 +30,7 @@ from typing import Any
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from jwt import PyJWKClient
-from jwt.exceptions import PyJWKClientError, PyJWTError
+from jwt.exceptions import InvalidTokenError, PyJWKClientError, PyJWTError
 
 from .config import settings
 
@@ -76,37 +76,56 @@ def _jwks_client() -> PyJWKClient:
 
 
 def reset_jwks_cache() -> None:
-    """Drop the cached key set (used by configuration changes and tests)."""
-    _jwks_client.cache_clear()
+    """Drop the cached key set (used on a key rotation and by tests).
+
+    Tolerant on purpose: the client is swappable (tests stub it), so refreshing
+    must not depend on the replacement happening to be an ``lru_cache`` wrapper.
+    """
+    clear = getattr(_jwks_client, "cache_clear", None)
+    if clear is not None:
+        clear()
 
 
 def verify_token(token: str) -> AuthUser:
     """Verify a raw JWT and return the user it belongs to. Never returns a
     partially-trusted user: any doubt raises :class:`AuthError`.
 
-    A failure is retried once against a freshly fetched key set, because the
-    cache holds one key set per process: without the retry, a key rotation at
-    the auth provider would reject valid tokens until that cache expired.
-
     Blocking (it may fetch the JWKS), so callers should use
     :func:`verify_bearer_token` from async code.
     """
-    try:
-        return _verify_token(token)
-    except AuthError:
-        reset_jwks_cache()
-        return _verify_token(token)
-
-
-def _verify_token(token: str) -> AuthUser:
     if not settings.auth_configured:
         raise AuthError("Authentication is not configured on this server.")
+    return _decode_token(token, _signing_key_for(token))
 
+
+def _signing_key_for(token: str):
+    """Resolve the token's signing key, refreshing the key set once on failure.
+
+    Only key *resolution* is retried. The cache holds one key set per process,
+    so a rotation at the auth provider would otherwise reject valid tokens until
+    that cache expired; but a token that resolved a key and then failed its
+    claims (expired, tampered, wrong issuer) is genuinely bad and must not cost
+    a second JWKS fetch.
+
+    A string that is not a JWT at all must fail as a bad *token*, not a server
+    error: PyJWT raises :class:`~jwt.exceptions.DecodeError` (a `PyJWTError` but
+    not a `PyJWKClientError`) while parsing the header, before any key lookup, so
+    it stays out of the retry path.
+    """
     try:
-        signing_key = _jwks_client().get_signing_key_from_jwt(token)
+        return _jwks_client().get_signing_key_from_jwt(token)
+    except InvalidTokenError as exc:
+        raise AuthError(f"Malformed token: {exc}") from exc
     except PyJWKClientError as exc:
-        raise AuthError(f"Signing key unavailable: {exc}") from exc
+        logger.info("Signing key lookup failed; refetching the key set: %s", exc)
+        reset_jwks_cache()
+        try:
+            return _jwks_client().get_signing_key_from_jwt(token)
+        except PyJWTError as retry_exc:
+            raise AuthError(f"Signing key unavailable: {retry_exc}") from retry_exc
 
+
+def _decode_token(token: str, signing_key) -> AuthUser:  # noqa: ANN001
     try:
         payload: dict[str, Any] = jwt.decode(
             token,

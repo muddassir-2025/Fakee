@@ -43,7 +43,10 @@ export function ProfilePage({ onSignInRequest }: { onSignInRequest: () => void }
       setData(await fetchMyReports());
     } catch (err) {
       if (err instanceof ApiError && err.needsSignIn) {
+        // Ask the auth client once more (the session may have just expired),
+        // but show the outcome rather than silently retrying forever.
         setData(null);
+        setError("Your sign-in has expired. Sign in again, then reload your reports.");
         await refresh();
       } else {
         setError(err instanceof Error ? err.message : String(err));
@@ -53,10 +56,13 @@ export function ProfilePage({ onSignInRequest }: { onSignInRequest: () => void }
     }
   }, [refresh]);
 
+  // Keyed on the user *id*: `readSession()` returns a fresh object every check,
+  // so depending on the object would re-fetch on every focus event.
+  const userId = user?.id ?? null;
   useEffect(() => {
-    if (user) void load();
+    if (userId) void load();
     else setData(null);
-  }, [user, load]);
+  }, [userId, load]);
 
   async function onWithdraw(report: ReportOut) {
     setBusy(report.id);

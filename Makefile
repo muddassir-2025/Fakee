@@ -59,7 +59,8 @@ build: ## Build the frontend
 	cd frontend && npm run build
 
 extension-zip: ## Package the extension for the Chrome Web Store
-	# Pass a deployed backend, e.g. make extension-zip EXT_ARGS="--api-base https://api.example.com/api"
+	# Pass the deployed services, e.g.:
+	#   make extension-zip EXT_ARGS="--api-base https://api.example.com/api --site-url https://example.com"
 	$(VENV_PY) scripts/package_extension.py $(EXT_ARGS)
 
 extension-screenshots: ## Render the 1280x800 Chrome Web Store screenshots (needs Chrome)

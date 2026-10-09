@@ -305,8 +305,13 @@
               explicitly report a posting.
             </li>
             <li>
-              No accounts, no cookies, no analytics, no advertising, and no reading of pages you
-              did not ask it to check.
+              <strong>Investigating needs no account.</strong> Signing in with Google is required
+              only to <em>report</em> a posting, so a report can be attributed to you, followed on
+              your own page, and withdrawn.
+            </li>
+            <li>
+              No analytics, no advertising, no tracking cookies, and no reading of pages you did not
+              ask it to check.
             </li>
           </ul>
         </div>
@@ -358,11 +363,14 @@
         <h2>3. What is stored</h2>
         <h3>On your machine</h3>
         <p>
-          The extension keeps two things in Chrome's local extension storage
-          (<code>chrome.storage.local</code>): your settings (backend API base, search provider, and
-          an optional search API key if you added one), and the last posting you pasted so it is
-          still there when you reopen the side panel. Nothing else is stored, and clearing the
-          extension's data or uninstalling it removes both.
+          The extension keeps a few things in Chrome's local extension storage
+          (<code>chrome.storage.local</code>): your settings (backend API base, site URL, search
+          provider, and an optional search API key if you added one), and the last posting you pasted
+          so it is still there when you reopen the side panel. If you sign in so you can report
+          postings, the extension also stores the session the website hands it — your account id,
+          email address, display name and a short-lived access token — so the side panel can file a
+          report as you. Signing out in the side panel deletes it, and clearing the extension's data
+          or uninstalling the extension removes everything.
         </p>
         <h3>On the backend</h3>
         <ul>
@@ -371,9 +379,13 @@
             running a check leaves no record of what you pasted.
           </li>
           <li>
-            <strong>Reports are stored.</strong> If you press "Report as scam", the description you
-            submit is stored and linked to a company record so repeated reports can be correlated.
-            This is the only path that persists what you wrote, and it only happens when you ask.
+            <strong>Reports are stored — with your account attached.</strong> If you press "Report
+            as scam" while signed in, the description you submit is stored and linked to a company
+            record so repeated reports can be correlated. The report is also stored with your account
+            id, the email address and display name on your Google account, the date, and the verdict
+            you were looking at when you filed it. This is the only path that persists what you
+            wrote, and it only happens when you ask. You can see every report you filed, and its
+            review status, on the website's <em>My reports</em> page.
           </li>
           <li>
             <strong>Company-level cache.</strong> A finished result may be cached for up to 24 hours
@@ -393,8 +405,12 @@
 
         <h2>4. What is never done</h2>
         <ul class="no">
-          <li>No user accounts and no sign-in.</li>
-          <li>No cookies or cross-site tracking.</li>
+          <li>No account or sign-in is needed to investigate a posting — only to report one.</li>
+          <li>
+            No identity data is collected beyond what the sign-in provider returns: your account id,
+            email address and display name.
+          </li>
+          <li>No tracking cookies or cross-site tracking.</li>
           <li>No analytics or advertising SDKs.</li>
           <li>No selling or renting of personal data.</li>
           <li>No reading of pages unrelated to a run.</li>
@@ -415,6 +431,16 @@
           <li>
             Clear the last pasted posting from <strong>Settings</strong> in the side panel, or clear
             the extension's storage — it is gone.
+          </li>
+          <li>
+            <strong>Withdraw a report</strong> from <em>My reports</em> on the website (or from
+            "My reports" in the side panel). It stops counting towards that company's history
+            immediately; the record is kept in a withdrawn state so an administrator cannot resurrect
+            it.
+          </li>
+          <li>
+            <strong>Sign out</strong> at any time. That ends the session; it does not delete reports
+            you already filed, which you can withdraw first if you wish.
           </li>
           <li>
             Point the extension at <strong>your own backend</strong>. The API base is a setting, so
@@ -440,6 +466,17 @@
           If you have the extension installed, the page can open a local connection to it so a check
           runs inline. In that case the text you type is handed to your extension and the resulting
           verdict is rendered on the page — the website itself never receives or stores it.
+        </p>
+        <p>
+          The account pages do talk to the backend, and only when you are signed in. <em>My
+          reports</em> lists the reports you filed and lets you withdraw one; the
+          <em>admin dashboard</em> is restricted to the operator's own administrator address and
+          shows the report queue — including the reporter's email address and display name and the
+          review note — so reports can be accepted, rejected, or sent back to the queue. Signing in
+          is handled by <strong>Neon Auth</strong> with Google as the provider. The website sends
+          your browser to Neon Auth for the sign-in itself and receives back a session; your Google
+          password is never seen by us. Reporting requires that session, and the backend verifies
+          every request's signed token before accepting a report or serving an account page.
         </p>
 
         <h2>8. Self-hosted and other deployments</h2>

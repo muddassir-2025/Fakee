@@ -15,6 +15,13 @@ import os
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./data/test_investigations.db"
 os.environ["GROQ_API_KEY"] = ""
 os.environ["EXA_API_KEY"] = ""
+# Auth defaults to *unconfigured*: the fail-closed tests (503, not 401) assert
+# that, and a developer's local .env pointing at a real Neon Auth project must
+# not change what the suite verifies. The signed-in/report/admin tests opt in
+# explicitly through the `configured_auth` fixture.
+os.environ["NEON_AUTH_BASE_URL"] = ""
+os.environ["NEON_AUTH_JWKS_URL"] = ""
+os.environ["NEON_AUTH_ISSUER"] = ""
 # The company-level response cache persists across requests; keep it off so one
 # test cannot be served another test's result. Cache tests enable it explicitly.
 os.environ["RESPONSE_CACHE_ENABLED"] = "false"

@@ -24,6 +24,8 @@ export interface AuthUser {
   name?: string | null;
   image?: string | null;
   emailVerified?: boolean;
+  /** Present on the session payload the SDK returns; verified server-side. */
+  token?: string;
 }
 
 export const authClient = authAvailable
@@ -77,12 +79,33 @@ export async function signOutNow(): Promise<void> {
  * A fresh access token for API calls.
  *
  * Managed Better Auth tokens live for 15 minutes, so this is called per request
- * rather than cached — `token()` is a local mint from the existing session, not
- * a round trip that needs economising.
+ * rather than cached — minting one from an existing session is local work, not a
+ * round trip that needs economising.
+ *
+ * The JWT is read defensively: the documented shape is `data.token`, but the
+ * shipped SDK (0.7.0-beta) returns it nested as `data.session.token`. The
+ * session itself also carries the token (injected from the `set-auth-jwt`
+ * header), which is the fallback.
  */
 export async function accessToken(): Promise<string | null> {
   if (!authClient) return null;
-  const result = await authClient.token();
-  const token = (result?.data as { token?: string } | null)?.token;
-  return token ?? null;
+
+  type TokenPayload = { token?: string; session?: { token?: string } | null } | null;
+
+  try {
+    const result = await authClient.token();
+    const data = (result as { data?: TokenPayload } | null)?.data;
+    const token = data?.token ?? data?.session?.token;
+    if (token) return token;
+  } catch {
+    // Fall through to the session, which usually still has a live token.
+  }
+
+  try {
+    const result = await authClient.getSession();
+    const data = (result as { data?: { session?: { token?: string } | null } | null } | null)?.data;
+    return data?.session?.token ?? null;
+  } catch {
+    return null;
+  }
 }

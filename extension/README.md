@@ -63,11 +63,33 @@ Open **Settings** in the side panel:
 | Setting | Default | Notes |
 | --- | --- | --- |
 | Backend API base | `http://localhost:8000/api` | Where your FastAPI backend runs |
+| Website URL | `http://localhost:5173` | The landing site; the panel signs in through it and the site hands the session back |
 | Search provider | DuckDuckGo (free, no key) | DuckDuckGo's HTML endpoint needs no API key |
 | Brave API key | — | Optional; enables the Brave Search free tier |
 
 The backend must allow the extension origin. It does by default via
 `CORS_ORIGIN_REGEX=chrome-extension://.*`.
+
+## Signing in and reporting
+
+Investigating needs no account. **Reporting does**, so a report can be attributed
+to the person who filed it — and withdrawn by them later.
+
+- The panel's report button opens the website's account page
+  (`<website URL>/?ext=<extension id>#/profile`) in a tab when you are anonymous,
+  where the "Sign in with Google" button waits. After sign-in that tab hands the
+  session (account id, email, display name and a short-lived token) back to the
+  extension over the `chrome.runtime` bridge — no copy-pasting.
+- **My reports** in the panel (top right) lists everything you filed with its
+  review status, and lets you **withdraw** one. It is the same data as the
+  website's *My reports* page.
+- **Sign out** deletes the stored session from the extension.
+- The panel sends the token as `Authorization: Bearer …` with every report call;
+  the backend verifies it before accepting anything. An expired token is caught
+  and you are asked to sign in again.
+
+Set `ADMIN_EMAILS` on the backend to open the admin dashboard, which reviews the
+report queue and can accept, reject, or requeue a report.
 
 ## Permissions, and why
 
@@ -86,7 +108,9 @@ The backend must allow the extension origin. It does by default via
 
 Captured page text is sent to **your** backend for analysis. Nothing is sent to
 Exa or any search API. Settings and the last input live in local extension
-storage only.
+storage only. If you sign in so you can report a posting, the extension also
+stores the session the website hands it (account id, email, display name, token)
+until you sign out.
 
 The full policy — what is read, what is sent to the backend, what is stored, and
 what is never done — lives at `frontend/public/privacy.html` and is served on the

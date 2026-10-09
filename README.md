@@ -127,8 +127,14 @@ verdict is rendered on the page.
 ```bash
 cd frontend
 npm install
+cp .env.example .env          # set VITE_NEON_AUTH_URL to enable sign-in / reporting
 npm run dev                   # http://localhost:5173
 ```
+
+The site is a static SPA. Its routes are hash-based, so no server rewrites are
+needed on a static host: `/#/profile` is *My reports* and `/#/admin` is the admin
+dashboard. Both require the `VITE_*` variables above to be set **at build time**
+(Vite inlines them) — see [`frontend/.env.example`](frontend/.env.example).
 
 Set the extension's store URL in `frontend/src/content.ts` (`EXTENSION.storeUrl`)
 when the listing is published — the extension id is read from that URL, which is
@@ -215,7 +221,12 @@ nothing else depends on it.
 | `POST` | `/api/analyst`             | On-demand analyst read over captured pages |
 | `GET`  | `/api/investigations`       | Recent investigations                |
 | `GET`  | `/api/investigations/{id}`  | Reload a stored investigation        |
-| `POST` | `/api/reports`              | Submit a user report                 |
+| `POST` | `/api/reports`              | Submit a user report (**sign-in required**) |
+| `GET`  | `/api/reports/mine`         | Your own reports + review status (**sign-in required**) |
+| `POST` | `/api/reports/{id}/withdraw` | Withdraw your own report (**sign-in required**) |
+| `GET`  | `/api/admin/reports`        | Every report with its reporter (**admin only**) |
+| `POST` | `/api/admin/reports/{id}/review` | Accept / reject / requeue a report (**admin only**) |
+| `GET`  | `/api/admin/overview`       | Dashboard headline numbers (**admin only**) |
 | `GET`  | `/api/stats`                | Aggregate stats                      |
 | `GET`  | `/api/metrics`              | Operational metrics (JSON)           |
 | `GET`  | `/api/metrics/prometheus`   | Same metrics, Prometheus text format |
@@ -245,6 +256,65 @@ curl -s http://127.0.0.1:8000/api/investigate \
   "stages": [ { "stage": "extraction", "status": "ok", "duration_ms": 41 } ]
 }
 ```
+
+---
+
+## Sign-in, reporting, and the admin dashboard
+
+Investigating stays anonymous and free. **Reporting a scam is a write about a
+named business, so it needs a signed-in user** — the report is attributed to the
+account that filed it, and can be tracked and withdrawn.
+
+Sign-in is [Neon Auth](https://neon.com/docs/auth) (Managed Better Auth) with
+Google as the provider. The browser mints a short-lived JWT (15 min); the
+backend verifies it against the project's JWKS — offline apart from fetching the
+public keys — and checks that the `iss` claim is *your* auth project, so a token
+minted elsewhere can never be replayed.
+
+```
+Website / side panel ── sign in with Google ──► Neon Auth ──► session + JWT
+       │
+       └── Authorization: Bearer <JWT> ──► FastAPI (verifies signature + issuer)
+```
+
+Three surfaces build on that:
+
+- **Report, from the site or the extension.** The button opens sign-in first when
+  you are anonymous. The extension receives the session from the website over the
+  bridge (`AUTH_SESSION`), so "Report as scam" works in the side panel too.
+- **My reports (`/#/profile`).** Every report you filed with its review status
+  (pending / approved / rejected / withdrawn), the verdict you were looking at
+  when you filed it, and a **Withdraw** action. Withdrawing is idempotent and
+  stops the report counting towards the company's history immediately; a report an
+  administrator has already reviewed can no longer be withdrawn.
+- **Admin dashboard (`/#/admin`).** Restricted to `ADMIN_EMAILS`. Shows the review
+  queue with **who reported what** — reporter email and name, the company, the
+  description, the verdict at the time, the timestamps — plus headline numbers
+  (pending/approved/rejected/withdrawn, reports in the last 7 days, distinct
+  reporters, most-reported companies), a status filter and a search box. Each row
+  can be **accepted, rejected, or returned to the queue**, with a note that is
+  shown back to the reporter on *My reports*.
+
+Setup (both sides must point at the **same** Neon Auth URL):
+
+```bash
+# backend/.env
+NEON_AUTH_BASE_URL=https://<project>.neonauth.<region>.aws.neon.tech/neondb/auth
+ADMIN_EMAILS=studymuddassir@gmail.com       # comma-separated, case-insensitive
+REPORTS_REQUIRE_APPROVAL=false              # true: nothing counts until an admin accepts it
+
+# frontend/.env
+VITE_NEON_AUTH_URL=https://<project>.neonauth.<region>.aws.neon.tech/neondb/auth
+VITE_API_BASE=                              # empty = same origin (Vite proxies /api in dev)
+VITE_ADMIN_EMAIL=studymuddassir@gmail.com   # cosmetic only; the API enforces ADMIN_EMAILS
+```
+
+Reporting **fails closed**: with no auth project configured the API answers `503`
+rather than accepting an anonymous report, and a missing/expired token is `401`.
+Keep Google as the only enabled provider — the admin allowlist trusts the verified
+`email` claim, so an unverified email/password signup could otherwise claim the
+admin address. See [`frontend/.env.example`](frontend/.env.example) for the
+website's variables.
 
 ---
 
@@ -331,8 +401,10 @@ Three pieces to ship, and only the first is a plain static host:
 | Backend (`backend/`) | **Render** (or any container host) | The extension calls it, so it must be a public HTTPS URL. |
 | Extension (`extension/`) | **Chrome Web Store** | One-time $5 developer registration, then review. |
 
-The website does **not** call the backend — the extension does. A `localhost`
-backend therefore works only on your own machine, so deploy it before publishing.
+The website *and* the extension call the backend: the extension runs the
+investigation, and the website uses the API for sign-in-gated reporting, *My
+reports*, and the admin dashboard. A `localhost` backend therefore works only on
+your own machine, so deploy it before publishing.
 
 ### Backend on Render
 
@@ -343,6 +415,13 @@ Build from the existing `backend/Dockerfile` (the container entrypoint runs
 - `DATABASE_URL` — your Neon connection string (plain `postgresql://` is fine; it is normalized)
 - `CORS_ORIGINS` — include your Vercel origin, e.g. `https://<your-app>.vercel.app`
 - `ENVIRONMENT=production` — disables interactive docs and internal error details
+- `NEON_AUTH_BASE_URL` — your Neon Auth base URL. Reporting **fails closed (503)** without it
+- `ADMIN_EMAILS` — comma-separated, case-insensitive list of who may open the admin dashboard
+- `REPORTS_REQUIRE_APPROVAL` — optional; `true` means a report counts only after an admin accepts it
+
+`CORS_ORIGINS` also has to allow the *extension*, which it does out of the box via
+`CORS_ORIGIN_REGEX=chrome-extension://.*`. Without that, the side panel's report
+button cannot reach the API.
 
 The **container entrypoint runs `alembic upgrade head` before serving**, and on
 PostgreSQL the schema is owned by Alembic alone. `AUTO_CREATE_SCHEMA` is ignored
@@ -372,16 +451,53 @@ psql "$DATABASE_URL" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
 
 Then redeploy.
 
+### Website on Vercel
+
+Root directory `frontend`, build `npm run build`, output `dist`. Vite inlines
+environment variables **at build time**, so set these in the Vercel project and
+redeploy — changing one without a rebuild does nothing:
+
+| Variable | Value | Effect when missing |
+| --- | --- | --- |
+| `VITE_NEON_AUTH_URL` | your Neon Auth base URL (the same value as the backend's `NEON_AUTH_BASE_URL`) | the site ships with sign-in **disabled**: no *Sign in* button in the header, reporting unavailable |
+| `VITE_API_BASE` | your backend origin, e.g. `https://<your-backend>` | the account pages call `<site>/api/...`, which a static host answers with 404 |
+| `VITE_ADMIN_EMAIL` | the admin address | cosmetic only (the header's Admin link) — the API enforces `ADMIN_EMAILS` either way |
+
+The site still builds and serves fine without them; it just cannot sign anyone in
+or file a report. See [`frontend/.env.example`](frontend/.env.example).
+
+### Google sign-in in production
+
+Neon Auth ships shared Google credentials for development, which is fine for
+testing but shows *Neon's* name on the consent screen. For production, create your
+own Google OAuth client and register Neon's callback with it:
+
+1. **Neon Console → project → branch → Settings → Auth → OAuth providers.**
+   Configure Google and paste your Client ID and secret.
+2. **Google Cloud Console → Credentials → your Web-application OAuth client.**
+   Under *Authorized redirect URIs* add exactly
+   `{NEON_AUTH_BASE_URL}/callback/google` (no trailing slash before `/callback`),
+   and under *Authorized JavaScript origins* add your site's origins
+   (`http://localhost:5173` and `https://<your-app>.vercel.app`).
+3. **Neon Console → Settings → Auth → trusted domains.** Add every origin you
+   pass as `callbackURL` — your Vercel origin, plus `http://localhost:5173` while
+   developing. Without this, Managed Better Auth will not redirect a finished
+   sign-in back to your site.
+
+If the browser lands on a Google page saying `redirect_uri_mismatch`, step 2 is
+missing or has a typo: the error URL names the exact redirect URI it expected.
+
 ### Extension package
 
 ```bash
-make extension-zip EXT_ARGS="--api-base https://<your-backend>/api"
+make extension-zip EXT_ARGS="--api-base https://<your-backend>/api --site-url https://<your-app>.vercel.app"
 # -> dist/fakee-extension-<version>.zip
 ```
 
-Only runtime files are included, `manifest.json` sits at the zip root, and the
-deployed API base is baked in as the default (it warns you if the build still
-points at localhost). Upload that zip in the
+Only runtime files are included, `manifest.json` sits at the zip root, and both
+deployed defaults are baked in: the API base the panel talks to, and the website
+it opens for sign-in. It warns you if either still points at localhost. Upload
+the zip in the
 [Chrome Web Store developer dashboard](https://chrome.google.com/webstore/devconsole).
 The listing needs screenshots, a privacy-policy URL, and a justification for
 `<all_urls>` (it has to read the result pages a search returns). The policy page
