@@ -73,7 +73,7 @@ reproducible rule engine — not decided arbitrarily by an LLM.
 | Exa search/content        | `services/exa.py` (free tier)                                              |
 | Categorized query builder | `services/query_builder.py`                                                |
 | Domain verification       | `services/domain_check.py` (RDAP + DNS + HTTPS + redirect + name match)    |
-| Scam-pattern engine       | `services/patterns.py` (24 patterns across money/channel/PII/opportunity/domain/reputation/history) |
+| Scam-pattern engine       | `services/patterns.py` (29 patterns across money/channel/PII/opportunity/domain/reputation/history) |
 | Risk engine               | `services/risk.py` (severity weights + co-occurrence amplifiers)           |
 | Intelligence database     | `models.py` (companies, opportunities, domains, investigations, patterns, evidence, risk, reports) |
 | Orchestration             | `services/pipeline.py`                                                     |
@@ -438,6 +438,21 @@ Redis (see `backend/app/api/ratelimit.py`).
   (`shortener_link`, `unofficial_application_channel`) — and because genuine campus
   drives do use Google Forms and college shorteners, neither can alone produce a HIGH
   verdict.
+- **The score follows the kind of evidence, not its volume.** Dissatisfaction and
+  fraud are counted separately: `negative_reputation` covers complaints about an
+  employer (process, pay, reviews) and tops out inside MODERATE, because a company can
+  be a famously poor employer and still run a genuine drive. Only
+  `fraud_accusations_against_company` — independent sources alleging the company
+  *itself* defrauded people — or evidence the posting's terms are contradicted by an
+  official source (`claim_contradicted_by_official_source`) may reach HIGH. Accusations
+  are subtracted from the dissatisfaction count so one body of reports is not scored
+  twice. Impersonation reports are excluded throughout: there the company is the victim.
+- **Official sources can clear a channel as well as contradict a claim.** If an
+  authoritative page (a government portal, an official college notice) reproduces the
+  posting's own registration link, the "unofficial channel" signal stands down and trust
+  records it (`official_link_verified`) — that is what a legitimate campus programme
+  using a Google Form looks like. If an official source instead states *different*
+  terms, that contradiction is scored.
 - **Two documents, not one.** JSON 1 is what the user reported; JSON 2 is what the
   investigation discovered. Keeping them separate keeps the output auditable.
 - **Deterministic verdict.** The LLM extracts and summarizes; the score, level and

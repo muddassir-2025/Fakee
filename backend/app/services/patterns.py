@@ -483,7 +483,11 @@ def detect_patterns(
         _p(
             "claim_contradicted_by_official_source",
             reviews.claim_contradicted,
-            0.7,
+            # 0.6 keeps a contradiction on its own inside MODERATE and, with a
+            # hidden registration channel, in HIGH — not CRITICAL. The programme
+            # behind such a post is often real; what is unverified is *this*
+            # notice, so the wording must not claim "very likely fraudulent".
+            0.6,
             "An official source states different terms for this programme than the "
             "posting does (pay, eligibility, or the required application channel).",
         )

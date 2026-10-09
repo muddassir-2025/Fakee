@@ -50,6 +50,18 @@ async def test_investigate_returns_full_contract(client: httpx.AsyncClient) -> N
     assert body["risk"]["level"] in {"LOW", "MODERATE", "HIGH", "CRITICAL"}
     assert body["input"]["company"]["name"] == "ABC Technologies"
     assert body["input"]["money_request"]["detected"] is True
+    # The evidence signals the scoring depends on must survive serialization, so
+    # a client can see *why* a posting was rated the way it was.
+    reviews = body["investigation"]["reviews"]
+    assert {
+        "negative_mentions",
+        "fraud_accusations",
+        "link_verified_by_official_source",
+        "claim_contradicted",
+        "negative_source_domains",
+    } <= set(reviews)
+    for signal in body["risk"]["signals"]:
+        assert signal["id"] and signal["explanation"]
 
 
 def test_storage_is_opt_in_by_default() -> None:
