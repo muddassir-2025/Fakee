@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@neondatabase/neon-js": "^0.7.0-beta",
+    "@vercel/analytics": "^2.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

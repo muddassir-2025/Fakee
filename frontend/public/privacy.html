@@ -310,8 +310,9 @@
               your own page, and withdrawn.
             </li>
             <li>
-              No analytics, no advertising, no tracking cookies, and no reading of pages you did not
-              ask it to check.
+              No advertising, no tracking cookies, and no reading of pages you did not ask it to
+              check. The only traffic measurement is cookieless, aggregate page-view counting on the
+              website (see section 7) — the extension itself reports nothing about your usage.
             </li>
           </ul>
         </div>
@@ -411,7 +412,10 @@
             email address and display name.
           </li>
           <li>No tracking cookies or cross-site tracking.</li>
-          <li>No analytics or advertising SDKs.</li>
+          <li>
+            No advertising SDKs, and no behavioural or cross-site analytics. The website counts
+            page views in aggregate, cookielessly (section 7).
+          </li>
           <li>No selling or renting of personal data.</li>
           <li>No reading of pages unrelated to a run.</li>
           <li>No sharing beyond the providers in section 2.</li>
@@ -458,9 +462,16 @@
 
         <h2>7. The website</h2>
         <p>
-          The landing page is a static site. It sets no cookies, runs no analytics, and sends nothing
-          about you to its own server. It loads its two typefaces from Google Fonts, which means
-          Google receives your IP address and user-agent when the page loads.
+          The landing page is a static site. It sets no cookies of its own, and the only thing it
+          measures is aggregate page views through <strong>Vercel Web Analytics</strong>, which is
+          cookieless: visitors are identified by a hash derived from the incoming request that is
+          discarded within 24 hours, so there is no persistent identifier and no way to follow you
+          across other sites. What is recorded per view is the timestamp, the page path, the
+          referrer, filtered query parameters, coarse geolocation (city level), and your device,
+          browser and operating system families — aggregated statistics, not a profile of you. Any
+          content blocker or browser tracking protection stops it. It loads its two typefaces from
+          Google Fonts, which means Google receives your IP address and user-agent when the page
+          loads.
         </p>
         <p>
           If you have the extension installed, the page can open a local connection to it so a check
