@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Fakee — Fake Job & Internship Detector",
   "version": "1.0.0",
-  "description": "Investigate a job or internship for scam signals. The searches and page reads happen in your own browser; the verdict comes back with its evidence.",
+  "description": "Investigate a job or internship for scam signals. Searches and page reads run in your browser; the verdict returns with evidence.",
   "minimum_chrome_version": "116",
   "icons": {
     "16": "icons/icon16.png",

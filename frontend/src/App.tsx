@@ -55,10 +55,10 @@ const NAV = [
   { href: "#safety", label: "Safety rules" },
 ];
 
-function Header({ onGetExtension }: { onGetExtension: () => void }) {
+function Header({ onTryNow }: { onTryNow: (event: React.MouseEvent<HTMLAnchorElement>) => void }) {
   return (
     <header className="sticky top-0 z-40 border-b border-line/70 bg-paper/85 backdrop-blur-md">
-      <Container className="flex h-16 items-center justify-between gap-6">
+      <Container className="flex h-16 items-center justify-between gap-4 sm:gap-6">
         <a href="#top" className="flex items-center gap-2.5 text-ink">
           <Mark className="h-6 w-6 text-signal" />
           <span className="font-display text-[17px] font-semibold tracking-tight">
@@ -78,13 +78,19 @@ function Header({ onGetExtension }: { onGetExtension: () => void }) {
           ))}
         </nav>
 
-        <button
-          type="button"
-          onClick={onGetExtension}
-          className="shrink-0 rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-ink-soft"
+        {/*
+          An anchor, so it still works with JS disabled or opened in a new tab.
+          The handler takes the jump over from the browser: navigating to the
+          fragment would move focus off the box we just focused, and doing both
+          here also puts the cursor where the user is about to type.
+        */}
+        <a
+          href="#check"
+          onClick={onTryNow}
+          className="shrink-0 rounded-full bg-signal px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-signal/90"
         >
-          Get the extension
-        </button>
+          Try now
+        </a>
       </Container>
     </header>
   );
@@ -184,7 +190,12 @@ function Hero({ onGetExtension }: { onGetExtension: () => void }) {
             </a>
           </div>
 
-          <dl className="mt-12 grid max-w-lg grid-cols-3 gap-6 border-t border-line pt-7">
+          {/*
+            One column on phones: "Explainable" and "In your browser" are wider
+            than a third of a narrow screen, and a grid track cannot break a
+            single word, so three columns made them collide.
+          */}
+          <dl className="mt-12 grid max-w-lg grid-cols-1 gap-6 border-t border-line pt-7 sm:grid-cols-3">
             <div>
               <dt className="eyebrow">Searches</dt>
               <dd className="mt-1 font-display text-2xl font-semibold">In your browser</dd>
@@ -797,9 +808,20 @@ export default function App() {
     document.getElementById("install")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  // "Try now" lands on the paste box with the cursor in it, so checking a
+  // posting is one step instead of scroll-then-find-the-box-then-tap.
+  const goToCheck = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    const box = document.getElementById("posting");
+    if (!box) return; // Nothing to aim at — let the browser follow the hash.
+    event.preventDefault();
+    document.getElementById("check")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // preventScroll keeps the focus from cancelling the smooth scroll above.
+    box.focus({ preventScroll: true });
+  };
+
   return (
     <div className="min-h-screen bg-paper">
-      <Header onGetExtension={scrollToInstall} />
+      <Header onTryNow={goToCheck} />
       <main>
         <Hero onGetExtension={scrollToInstall} />
         <Problem />

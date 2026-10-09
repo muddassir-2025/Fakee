@@ -5,7 +5,7 @@ VENV_PY := $(shell if [ -x backend/.venv/Scripts/python.exe ]; then echo $(CURDI
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install backend dev test migrate eval frontend typecheck build extension-zip check-bridge docker-up docker-down logs clean
+.PHONY: help venv install backend dev test migrate eval frontend typecheck build extension-zip extension-screenshots check-bridge docker-up docker-down logs clean
 
 help: ## Show this help
 	@echo "Targets:"
@@ -20,6 +20,7 @@ help: ## Show this help
 	@echo "  typecheck    Typecheck the frontend"
 	@echo "  build        Build the frontend for production"
 	@echo "  extension-zip  Package the extension for the Chrome Web Store"
+	@echo "  extension-screenshots  Render the store screenshots (needs Chrome)"
 	@echo "  check-bridge Verify the website/extension bridge contract"
 	@echo "  docker-up    Build and start via docker compose"
 	@echo "  docker-down  Stop docker compose"
@@ -60,6 +61,9 @@ build: ## Build the frontend
 extension-zip: ## Package the extension for the Chrome Web Store
 	# Pass a deployed backend, e.g. make extension-zip EXT_ARGS="--api-base https://api.example.com/api"
 	$(VENV_PY) scripts/package_extension.py $(EXT_ARGS)
+
+extension-screenshots: ## Render the 1280x800 Chrome Web Store screenshots (needs Chrome)
+	node extension/tools/make-screenshots.mjs
 
 check-bridge: ## Verify the website/extension bridge protocol still matches
 	node scripts/check-extension-bridge.mjs
