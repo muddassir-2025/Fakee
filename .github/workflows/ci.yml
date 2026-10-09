@@ -21,10 +21,19 @@ jobs:
           cache-dependency-path: backend/requirements-dev.txt
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
+      - name: Diagnostics
+        # Prints the environment a failure happened in, so a red run is
+        # diagnosable from the log alone (interpreter, deps, collected tests).
+        run: |
+          python -VV
+          python -m pip freeze
+          python -m pytest --collect-only -q 2>&1 | tail -3
+          python -c "import locale,sys; print('fs encoding:', sys.getfilesystemencoding(), '| preferred:', locale.getpreferredencoding(False))"
       - name: Run tests
         env:
           DATABASE_URL: sqlite+aiosqlite:///./data/test_investigations.db
-        run: pytest -q
+        # -ra lists every non-passing test with its reason at the end.
+        run: pytest -q -ra --tb=short
       - name: Migration applies and matches the models
         env:
           DATABASE_URL: sqlite+aiosqlite:///./data/migrate_check.db
