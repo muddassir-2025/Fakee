@@ -137,6 +137,75 @@ def is_free_email(domain: str | None) -> bool:
     return (domain or "") in FREE_EMAIL_DOMAINS
 
 
+# Second-level labels used by multi-part public suffixes (foo.co.in, x.ac.uk),
+# so the label before *them* is the one a registrant actually owns.
+SECOND_LEVEL_LABELS = {
+    "ac", "co", "com", "edu", "firm", "gen", "gov", "ind", "mil", "net",
+    "org", "res", "school",
+}
+# Legal-entity words that are part of a company's name but never its domain.
+LEGAL_SUFFIXES = {
+    "co", "corp", "corporation", "gmbh", "inc", "incorporated", "limited",
+    "llc", "ltd", "plc", "private", "pvt",
+}
+# A brand plus a short generic suffix is still the brand's own domain
+# (``eteaminc.com`` for "eTeam"); a brand buried inside a longer word is not.
+MAX_GENERIC_SUFFIX = 5
+MIN_TOKEN_LENGTH = 4
+
+
+def registrable_label(domain: str | None) -> str:
+    """The label a registrant owns: the one just before the public suffix.
+
+    ``jobs.adp.com`` -> ``adp``, ``mjcollege.ac.in`` -> ``mjcollege``,
+    ``tinyurl.com`` -> ``tinyurl``.
+    """
+    if not domain:
+        return ""
+    labels = [part for part in domain.lower().split(".")[:-1] if part]
+    if not labels:
+        return ""
+    if len(labels) >= 2 and labels[-1] in SECOND_LEVEL_LABELS:
+        return labels[-2]
+    return labels[-1]
+
+
+def domain_mentions_company(domain: str | None, name: str | None) -> bool:
+    """Whether a domain is *attributable* to the named employer.
+
+    Identity is only ever credited for a domain the employer plausibly owns: the
+    registrable label has to be the employer's name (``adp.com``), extend it
+    (``eteaminc.com`` for "eTeam"), or be contained in it (``mahindra.com`` for
+    "Tech Mahindra"). Any subdomain is fine (``jobs.adp.com``), but a label that
+    merely *embeds* the brand inside something longer (``infosys-careers.xyz``)
+    is not treated as the employer's own domain here — that shape is
+    impersonation, and it is the domain checks, not this helper, that look for
+    it.
+
+    Deliberately conservative: this is what decides whether the UI may claim a
+    link "points at the employer's own domain", so a false negative (no claim)
+    is far cheaper than a false positive.
+    """
+    compact = normalize_name(registrable_label(domain))
+    tokens = [
+        token
+        for token in re.split(r"[^a-z0-9]+", (name or "").lower())
+        if token and token not in LEGAL_SUFFIXES
+    ]
+    if not compact or not tokens:
+        return False
+
+    full = "".join(tokens)
+    for candidate in {full, *tokens}:
+        if compact == candidate:
+            return True
+        if len(candidate) < MIN_TOKEN_LENGTH:
+            continue
+        if compact.startswith(candidate) and len(compact) - len(candidate) <= MAX_GENERIC_SUFFIX:
+            return True
+    return False
+
+
 # A negation immediately before a money/risk term flips its meaning:
 # "no registration fee", "without any deposit", "never asked for money".
 # Allows a few words in between ("no, under any circumstance, a fee").

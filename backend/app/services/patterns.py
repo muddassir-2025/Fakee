@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 
 from ..schemas import DetectedPattern, DomainIntel, ReviewSignals, UserInput
-from .text_utils import has_unnegated
+from .text_utils import domain_mentions_company, extract_domain, has_unnegated
 
 # --------------------------------------------------------------------------
 # Pattern catalog
@@ -68,6 +68,15 @@ PATTERN_CATALOG: dict[str, dict[str, str]] = {
         "category": "channel",
         "severity": "medium",
         "description": "Application URL is obfuscated behind a link shortener.",
+    },
+    "unofficial_application_channel": {
+        "label": "Application link is not the employer's domain",
+        "category": "channel",
+        "severity": "medium",
+        "description": (
+            "The posting names an employer but routes registration through a link on a "
+            "domain that employer does not own, so the destination cannot be verified."
+        ),
     },
     "free_email_contact": {
         "label": "Contact via free email provider",
@@ -152,6 +161,26 @@ PATTERN_CATALOG: dict[str, dict[str, str]] = {
         "category": "reputation",
         "severity": "high",
         "description": "Little or no independent evidence the company exists as described.",
+    },
+    "fraud_accusations_against_company": {
+        "label": "Independent fraud accusations",
+        "category": "reputation",
+        "severity": "high",
+        "description": (
+            "Independent third-party sources accuse the company itself of defrauding "
+            "or cheating candidates (not workplace dissatisfaction, and not the "
+            "company being impersonated)."
+        ),
+    },
+    "claim_contradicted_by_official_source": {
+        "label": "An official source contradicts the posting",
+        "category": "opportunity",
+        "severity": "high",
+        "description": (
+            "An official or authoritative source states different terms for this "
+            "programme than the posting does — pay, eligibility, or the channel it "
+            "must be applied through."
+        ),
     },
     "negative_reputation": {
         "label": "Negative reports found online",
@@ -296,7 +325,10 @@ def parse_monthly_amount(salary: str | None) -> tuple[float | None, str | None]:
     numbers = [float(n.replace(",", "")) for n in re.findall(r"[\d,]+(?:\.\d+)?", salary) if n.strip(",.")]
     if not numbers:
         return None, None
-    amount = max(numbers)
+    # An advertised *band* ("Rs 8,300 - Rs 58,275 per month") is an experience
+    # range, not a promise of the top figure. Judging "unusually high pay" on the
+    # upper bound flagged genuine postings; the midpoint represents the offer.
+    amount = (min(numbers) + max(numbers)) / 2 if len(numbers) > 1 else numbers[0]
 
     if "lpa" in text or "lakh per annum" in text or "per annum" in text:
         return amount * 100000 / 12, "annual"
@@ -409,12 +441,51 @@ def detect_patterns(
             "There is no official application channel; contact is social/messaging only.",
         )
     )
+    # A shortener is a URL fact, not an inference: the destination really cannot
+    # be read, so confidence is high (weight is what keeps it contextual).
     emit(
         _p(
             "shortener_link",
             any(_is_shortener_url(u) for u in user_input.contacts.urls),
-            0.6,
-            "The application link is hidden behind a URL shortener.",
+            0.85,
+            "The application link is hidden behind a URL shortener, so its "
+            "destination cannot be read.",
+        )
+    )
+    # The posting names an employer but never links to that employer's own
+    # domain: candidates are routed to a third-party or obfuscated address
+    # instead. Genuine campus drives do use Google Forms and the college's own
+    # shortener, so this stays contextual — it can add weight, but it can never
+    # by itself justify a HIGH verdict.
+    emit(
+        _p(
+            "unofficial_application_channel",
+            bool(user_input.contacts.urls)
+            and bool(user_input.company.name)
+            and not _links_to_employer_domain(user_input)
+            # An official page reproducing the same link verifies the destination,
+            # which is exactly what this signal says cannot be done (a government
+            # or college notice pointing at the same Google Form is the normal
+            # shape of a legitimate campus programme).
+            and not reviews.link_verified_by_official_source,
+            0.55,
+            "The posting names an employer but routes registration through a link "
+            "that is not on that employer's own domain.",
+            list(user_input.contacts.urls)[:2],
+        )
+    )
+
+    # ---- claim consistency vs an authoritative source ----
+    # "Advertised 4 LPA, the official scheme pays Rs 9,000/month" is a direct
+    # contradiction rather than an inference, so it can carry a HIGH verdict when
+    # it sits alongside channel evidence, but stays MODERATE on its own.
+    emit(
+        _p(
+            "claim_contradicted_by_official_source",
+            reviews.claim_contradicted,
+            0.7,
+            "An official source states different terms for this programme than the "
+            "posting does (pay, eligibility, or the required application channel).",
         )
     )
     free_mail = any(
@@ -571,6 +642,18 @@ def detect_patterns(
                 severity=severity,
             )
         )
+    accusation_signal = _fraud_accusation_signal(reviews)
+    if accusation_signal is not None:
+        severity, confidence = accusation_signal
+        emit(
+            _p(
+                "fraud_accusations_against_company",
+                True,
+                confidence,
+                _fraud_accusation_rationale(reviews),
+                severity=severity,
+            )
+        )
     emit(
         _p(
             "no_company_footprint",
@@ -605,6 +688,16 @@ MIN_NEGATIVE_MENTIONS = 3
 MIN_NEGATIVE_SOURCES = 2
 
 
+def _dissatisfaction_volume(reviews: ReviewSignals) -> int:
+    """Negative mentions that are *not* already counted as fraud accusations.
+
+    Accusations are a subset of the negative count (every accuser is a negative
+    mention). Scoring both would double-count the same pages, which pushed one
+    real case to 95/100 off four reports.
+    """
+    return max(0, reviews.negative_mentions - reviews.fraud_accusations)
+
+
 def _negative_reputation_detected(reviews: ReviewSignals) -> bool:
     """Negative reputation needs volume *and* independent corroboration.
 
@@ -613,7 +706,7 @@ def _negative_reputation_detected(reviews: ReviewSignals) -> bool:
     from at least two distinct domains; otherwise fall back to the count so
     callers that only provide totals (e.g. the LLM structuring path) still work.
     """
-    if reviews.negative_mentions < MIN_NEGATIVE_MENTIONS:
+    if _dissatisfaction_volume(reviews) < MIN_NEGATIVE_MENTIONS:
         return False
     domains = {d for d in reviews.negative_source_domains if d}
     if domains:
@@ -622,22 +715,58 @@ def _negative_reputation_detected(reviews: ReviewSignals) -> bool:
 
 
 def _negative_reputation_signal(reviews: ReviewSignals) -> tuple[str, float] | None:
-    """Corroborated negative reports, weighted by how many independent sources.
+    """Corroborated *dissatisfaction*, weighted by how many independent sources.
 
-    A single negative mention is weak. Several independent reports that name the
-    company (found via the extension's own searches) are strong evidence, so the
-    severity scales with volume: 3+ across 2+ sources is ``high``, 4+ across 2+
-    sources is ``critical`` and can therefore drive a HIGH verdict.
+    This measures complaints about the employer — a poor process, unpaid work,
+    bad reviews — not proof that it defrauds people. A company can be a famously
+    bad employer and still be running a genuine recruitment drive, so this tops
+    out below the HIGH band on purpose. Explicit accusations get their own,
+    stronger signal in ``_fraud_accusation_signal``.
+
+    Severity is deliberately ``medium``: this is a caution, not a fraud signal, so
+    corroborated dissatisfaction reaches MODERATE (25 points) while an unreported
+    spread stays a listed, low-weight note (18 points) rather than being dressed
+    up as fraud. Anything that *accuses* the company of fraud is scored by
+    ``_fraud_accusation_signal`` instead, at a severity that can reach HIGH.
     """
     if not _negative_reputation_detected(reviews):
         return None
     domains = {d for d in reviews.negative_source_domains if d}
-    mentions = reviews.negative_mentions
-    if mentions >= 4 and len(domains) >= 2:
-        return "critical", 0.8
-    if mentions >= 3 and len(domains) >= 2:
-        return "high", 0.7
-    return "medium", 0.55
+    if len(domains) >= MIN_NEGATIVE_SOURCES:
+        return "medium", 0.9
+    return "medium", 0.65
+
+
+MIN_FRAUD_ACCUSATIONS = 2
+
+
+def _fraud_accusation_signal(reviews: ReviewSignals) -> tuple[str, float] | None:
+    """Independent sources accusing the company itself of fraud.
+
+    This is what separates "widely reported as a scam" from "poorly reviewed":
+    two accusations are cautionary, three or more across independent sources is
+    strong enough to justify HIGH on its own. Accusations that all trace to a
+    single source stay at ``high``, because volume from one site is not
+    corroboration — the same rule the dissatisfaction counter uses.
+    """
+    count = reviews.fraud_accusations
+    if count < MIN_FRAUD_ACCUSATIONS:
+        return None
+    domains = {d for d in reviews.negative_source_domains if d}
+    if domains and len(domains) < MIN_NEGATIVE_SOURCES:
+        return "high", 0.6
+    if count >= 3:
+        return "critical", 0.85
+    return "high", 0.75
+
+
+def _fraud_accusation_rationale(reviews: ReviewSignals) -> str:
+    domains = {d for d in reviews.negative_source_domains if d}
+    spread = f" across {len(domains)} independent sites" if domains else ""
+    return (
+        f"{reviews.fraud_accusations} independent source(s){spread} explicitly "
+        f"accuse this company of fraud."
+    )
 
 
 def _negative_reputation_rationale(reviews: ReviewSignals) -> str:
@@ -651,9 +780,18 @@ def _negative_reputation_rationale(reviews: ReviewSignals) -> str:
 
 
 def _is_shortener_url(url: str) -> bool:
-    from .text_utils import extract_domain, is_shortener
+    from .text_utils import is_shortener
 
     return is_shortener(extract_domain(url))
+
+
+def _links_to_employer_domain(user_input: UserInput) -> bool:
+    """True when at least one link is on a domain the employer plausibly owns."""
+    name = user_input.company.name
+    return any(
+        not _is_shortener_url(url) and domain_mentions_company(extract_domain(url), name)
+        for url in user_input.contacts.urls
+    )
 
 
 def pattern_metadata() -> list[dict[str, str]]:

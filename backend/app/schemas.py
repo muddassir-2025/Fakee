@@ -112,6 +112,22 @@ class ReviewSignals(BaseModel):
     fake_interview_complaints: int = 0
     salary_complaints: int = 0
     nonpayment_complaints: int = 0
+    # Independent third-party sources that explicitly accuse the company *itself*
+    # of fraud — scamming or cheating candidates. Kept separate from the plain
+    # negative counts because "this employer is unprofessional" and "this
+    # employer defrauded people" are different claims and must not score alike.
+    # Excludes the company being impersonated (there it is the victim).
+    fraud_accusations: int = 0
+    # An official/authoritative page (a government portal, the employer's own
+    # site, an official college notice) reproduces the same registration link or
+    # explicitly endorses the programme. Stands the "unofficial channel" signal
+    # down: the destination is verified, so caution is no longer warranted.
+    link_verified_by_official_source: bool = False
+    # An official/authoritative source states a *different* fact for the same
+    # programme than the posting does — e.g. the posting promises a package the
+    # official scheme says is a monthly stipend. A direct contradiction between
+    # the offer and the official source, not a suspicion.
+    claim_contradicted: bool = False
     # Distinct source domains that produced a negative mention. Used to require
     # corroboration across independent sources rather than a raw count.
     negative_source_domains: list[str] = Field(default_factory=list)

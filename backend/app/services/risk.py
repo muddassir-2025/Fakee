@@ -93,7 +93,8 @@ COMBINATIONS: list[tuple[set[str], float, str]] = [
 # Signals that represent *concrete* evidence of fraud: money or credentials
 # changing hands, impersonation / infrastructure evidence, or independent
 # corroboration. Everything else (contact over WhatsApp/Telegram, urgency, a
-# single weak reputation mention) is contextual.
+# shortened or third-party registration link, a single weak reputation mention)
+# is contextual.
 #
 # Real-world data from Indian job/internship scams (cybercrime.gov.in advisories,
 # bank/PSU fraud-awareness posts, scam-awareness write-ups) shows that genuine
@@ -111,6 +112,8 @@ HARD_PATTERNS: frozenset[str] = frozenset(
         "domain_unreachable",
         "no_company_footprint",
         "repeated_payment_complaints",
+        "fraud_accusations_against_company",
+        "claim_contradicted_by_official_source",
         "historical_reports",
         # Concrete scam structures that are not merely contextual.
         "unrealistic_easy_money",
@@ -161,6 +164,7 @@ IDENTITY_TRUST_SIGNALS = frozenset(
         "official_source_found",
         "corporate_email_matches_employer",
         "application_domain_matches_employer",
+        "official_link_verified",
     }
 )
 # How much positive evidence is needed before trust is considered "strong".
@@ -454,7 +458,12 @@ def _checklist(
         items.append(
             "Expand the shortened link and confirm it resolves to the employer's own domain."
         )
-    if {"domain_name_mismatch", "recent_domain", "domain_unreachable"} & ids:
+    if {
+        "domain_name_mismatch",
+        "recent_domain",
+        "domain_unreachable",
+        "unofficial_application_channel",
+    } & ids:
         items.append(
             "Open the employer's official careers page yourself and confirm this exact role exists there."
         )
@@ -492,10 +501,18 @@ def _verification_lists(
         verified.append("Website domain appears recently registered.")
     if "domain_name_mismatch" in present:
         verified.append("Domain does not match the claimed company name.")
+    if "unofficial_application_channel" in present:
+        unverified.append(
+            "Whether the registration link is operated by the named employer."
+        )
     if "domain_unreachable" in present:
         verified.append("Claimed website could not be resolved/reached.")
     if "repeated_payment_complaints" in present:
         verified.append("Multiple independent sources corroborate payment complaints.")
+    if "fraud_accusations_against_company" in present:
+        verified.append("Independent sources accuse this company itself of fraud.")
+    if "claim_contradicted_by_official_source" in present:
+        verified.append("An official source contradicts this posting's own terms.")
     if "historical_reports" in present:
         verified.append("Prior reports exist in this platform's database.")
     if sources_checked:

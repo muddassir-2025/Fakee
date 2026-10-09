@@ -73,7 +73,7 @@ reproducible rule engine — not decided arbitrarily by an LLM.
 | Exa search/content        | `services/exa.py` (free tier)                                              |
 | Categorized query builder | `services/query_builder.py`                                                |
 | Domain verification       | `services/domain_check.py` (RDAP + DNS + HTTPS + redirect + name match)    |
-| Scam-pattern engine       | `services/patterns.py` (23 patterns across money/channel/PII/opportunity/domain/reputation/history) |
+| Scam-pattern engine       | `services/patterns.py` (24 patterns across money/channel/PII/opportunity/domain/reputation/history) |
 | Risk engine               | `services/risk.py` (severity weights + co-occurrence amplifiers)           |
 | Intelligence database     | `models.py` (companies, opportunities, domains, investigations, patterns, evidence, risk, reports) |
 | Orchestration             | `services/pipeline.py`                                                     |
@@ -428,6 +428,16 @@ Redis (see `backend/app/api/ratelimit.py`).
   common in *legitimate* Indian hiring, so they are weighted `low` and can never, on
   their own, produce a HIGH/CRITICAL verdict — a hard signal (money, sensitive-data
   request, impersonation/domain evidence, or corroborated reports) is required.
+- **Trust is attribution, not adjacency.** A positive signal is only awarded for a
+  domain *attributable* to the named employer — its own label (`adp.com`), a subdomain
+  of it (`jobs.adp.com`), or the brand plus a short generic suffix (`eteaminc.com` for
+  "eTeam"). A link the posting merely happens to contain is never credited as "the
+  employer's own domain": a shortener, a Google Form or a hosting subdomain is not the
+  employer's property, and claiming otherwise is exactly what a scam relies on. A
+  registration link that is *not* the employer's domain is scored instead
+  (`shortener_link`, `unofficial_application_channel`) — and because genuine campus
+  drives do use Google Forms and college shorteners, neither can alone produce a HIGH
+  verdict.
 - **Two documents, not one.** JSON 1 is what the user reported; JSON 2 is what the
   investigation discovered. Keeping them separate keeps the output auditable.
 - **Deterministic verdict.** The LLM extracts and summarizes; the score, level and

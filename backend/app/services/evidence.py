@@ -36,7 +36,10 @@ Return ONLY JSON:
     "whatsapp_complaints": int,
     "fake_interview_complaints": int,
     "salary_complaints": int,
-    "nonpayment_complaints": int
+    "nonpayment_complaints": int,
+    "fraud_accusations": int,
+    "link_verified_by_official_source": bool,
+    "claim_contradicted": bool
   },
   "evidence": [
     {"type": "review"|"complaint"|"forum"|"website"|"social"|"news",
@@ -74,6 +77,26 @@ Rules:
   company is the victim there, not the source of the complaint.
 - Negative mentions are only results describing an actual negative candidate
   experience WITH this company as the actor.
+- "fraud_accusations" is the strictest bucket and must stay small and precise: the
+  number of independent third-party sources that explicitly allege the company
+  ITSELF defrauded or cheated people (a scam/fraud accusation, a BBB or consumer
+  complaint page, "con artists", "cheated me out of"). Do NOT count: employee or
+  workplace dissatisfaction (Glassdoor/AmbitionBox gripes about management, pay
+  or culture — those belong in "negative_mentions" only), the company's own
+  pages, general articles about job scams, or reports that its name is being
+  impersonated. Two or three precise accusations are worth more than a large
+  vague number; never inflate it to reach an amount.
+- "link_verified_by_official_source": true only when one of the provided results is
+  an official/authoritative page (a government portal, the company's own site, an
+  official college notice) that reproduces the SAME registration link or clearly
+  endorses this specific programme. A college's own notice reusing a Google Form
+  counts; a lookalike or unrelated page does not.
+- "claim_contradicted": true only when an official/authoritative result states a
+  DIFFERENT fact about the same programme — e.g. the posting advertises a 4 LPA
+  package while the official scheme's published terms say a monthly stipend, or
+  it names a portal the official source says is the only application channel.
+  Quote the contradiction in the analyst's red flags. This is a direct conflict
+  with an authority, not a general suspicion or a wording difference.
 - Keep evidence summaries short and factual. Cite the provided URLs only.
 - notable_findings: 3-7 concise observations (e.g. "3 results mention upfront fees").
 - analyst.fraud_score: 0 = clearly safe, 100 = clearly fraudulent. Judge only
@@ -98,6 +121,14 @@ STRONG_NEGATIVE_TERMS = {
     "scam", "fraud", "fake", "cheated", "cheat", "beware",
     "not paid", "unpaid", "no stipend", "money lost", "looted", "harass",
     "extortion", "advance fee",
+}
+# A subset that *accuses* rather than merely reports a bad experience: the page
+# says the company itself is a fraud, not that the reviewer was unhappy. Used for
+# the stricter ``fraud_accusations`` counter.
+ACCUSATION_TERMS = {
+    "scam", "fraudster", "fraudulent", "fraud", "fake company", "fake firm",
+    "not a real company", "no legit", "cheated", "cheating", "con artist",
+    "con-artist", "extortion", "ponzi", "sham company",
 }
 # Payment complaints must match a *pay-to-get-the-job* structure, not the word
 # "pay" on its own (which is ubiquitous — e.g. payroll companies).
@@ -274,6 +305,11 @@ def heuristic_structure(
             negatives += 1
             if result.source_domain and result.source_domain not in negative_domains:
                 negative_domains.append(result.source_domain)
+            # An explicit accusation that the company itself is fraudulent. Kept
+            # separate from ordinary dissatisfaction so a badly-reviewed-but-real
+            # employer cannot score like a company accused of defrauding people.
+            if on_topic and not own_domain and any(t in blob for t in ACCUSATION_TERMS):
+                reviews.fraud_accusations += 1
 
         # Complaint counters require a genuinely negative, on-topic result.
         if is_negative and on_topic:

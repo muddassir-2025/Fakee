@@ -10,7 +10,12 @@ the risk verdict is kept separate from the opportunity status.
 from __future__ import annotations
 
 from ..schemas import DomainIntel, ReviewSignals, TrustSignal, UserInput
-from .text_utils import extract_domain, is_free_email, normalize_name
+from .text_utils import (
+    domain_mentions_company,
+    extract_domain,
+    is_free_email,
+    is_shortener,
+)
 
 # Identity / financial credentials that should never be requested.
 SENSITIVE_TERMS = (
@@ -29,40 +34,38 @@ ELIGIBILITY_TERMS = (
 )
 
 
-def _company_domains(user_input: UserInput) -> set[str]:
-    """Domains that plausibly belong to the named employer."""
+def _employer_domains(user_input: UserInput) -> set[str]:
+    """Domains the employer's own website is on.
+
+    Only ``company.website`` can supply one, and only when it is attributable to
+    the employer by name (see ``domain_mentions_company``). Domains harvested
+    from the posting's *links* deliberately do not count: a scam tells you to
+    apply at the scammer's own address, so treating those as the employer's
+    would turn a malicious link into proof of identity — which is exactly the
+    bug this replaces (a tinyurl was being credited as "the employer's own
+    domain" because it was the domain the posting happened to mention).
+    """
     domains: set[str] = set()
-    candidates = list(user_input.contacts.domains)
     website = extract_domain(user_input.company.website)
-    if website:
-        candidates.append(website)
-    for domain in candidates:
-        if not domain:
-            continue
-        domain = domain.lower()
-        domains.add(domain)
-        parts = domain.split(".")
-        if len(parts) > 2:  # also the registrable domain (jobs.adp.com -> adp.com)
-            domains.add(".".join(parts[-2:]))
+    name = user_input.company.name
+    if not website or is_shortener(website):
+        return domains
+    if not domain_mentions_company(website, name):
+        return domains
+    domains.add(website)
+    parts = website.split(".")
+    if len(parts) > 2:  # also the registrable domain (jobs.adp.com -> adp.com)
+        domains.add(".".join(parts[-2:]))
     return domains
 
 
 def _application_domain(user_input: UserInput) -> str | None:
+    """Where the posting actually sends the candidate to register."""
     for url in user_input.contacts.urls:
         domain = extract_domain(url)
         if domain:
             return domain
     return user_input.contacts.domains[0] if user_input.contacts.domains else None
-
-
-def _domain_mentions_company(domain: str | None, name: str | None) -> bool:
-    if not domain or not name:
-        return False
-    normalized = normalize_name(name)
-    if not normalized:
-        return False
-    label = domain.lower().split(".")[0]
-    return normalized[:6] in normalize_name(label) or normalize_name(label) in normalized
 
 
 def assess_trust(
@@ -97,15 +100,15 @@ def assess_trust(
             "No OTP, PIN, card or banking credentials are requested.",
         )
 
-    company_domains = _company_domains(user_input)
+    employer_domains = _employer_domains(user_input)
     name = user_input.company.name
 
     corporate_email = None
     for email in user_input.contacts.emails:
         email_domain = email.split("@")[-1]
-        if is_free_email(email_domain):
+        if is_free_email(email_domain) or is_shortener(email_domain):
             continue
-        if email_domain in company_domains or _domain_mentions_company(email_domain, name):
+        if email_domain in employer_domains or domain_mentions_company(email_domain, name):
             corporate_email = email_domain
             break
     if corporate_email:
@@ -116,11 +119,18 @@ def assess_trust(
             f"The listed contact address is on the employer's own domain ({corporate_email}).",
         )
 
+    # Credit is given only for a link the employer plausibly owns. The domain
+    # verification stage's own ``company_name_match`` is deliberately not used
+    # here: that flag describes the employer's *website*, not the application
+    # link, and reusing it made every posting with a link look verified.
     application_domain = _application_domain(user_input)
     domain_matches = bool(
-        (domain and domain.company_name_match)
-        or (application_domain and application_domain in company_domains)
-        or _domain_mentions_company(application_domain, name)
+        application_domain
+        and not is_shortener(application_domain)
+        and (
+            application_domain in employer_domains
+            or domain_mentions_company(application_domain, name)
+        )
     )
     if domain_matches:
         add(
@@ -137,6 +147,17 @@ def assess_trust(
             "Official website found",
             +25,
             "A live domain matching the named employer was located.",
+        )
+
+    # An official/authoritative page reproducing the posting's own registration
+    # link is genuine identity evidence: the same destination is vouched for by a
+    # source that is not the sender.
+    if reviews is not None and reviews.link_verified_by_official_source:
+        add(
+            "official_link_verified",
+            "Registration link confirmed by an official source",
+            +20,
+            "An official or authoritative page reproduces this registration link.",
         )
 
     stages = [t for t in SELECTION_STAGE_TERMS if t in text]

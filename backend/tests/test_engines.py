@@ -496,7 +496,12 @@ def test_analyst_report_is_parsed_and_clamped() -> None:
 
 
 def test_negative_reputation_scales_with_corroboration() -> None:
-    """Independent scam reports must weigh more than an isolated mention."""
+    """Independent complaint sources must weigh more than an isolated mention.
+
+    Dissatisfaction tops out inside MODERATE by design. Only explicit fraud
+    accusations (``fraud_accusations``) may reach HIGH — see
+    ``test_fraud_accusations_separate_from_employee_complaints``.
+    """
     user_input = _empty_input()
 
     def reputation(mentions: int, domains: list[str]):
@@ -513,16 +518,21 @@ def test_negative_reputation_scales_with_corroboration() -> None:
         }
         return patterns.get("negative_reputation")
 
-    three = reputation(3, ["a.example", "b.example"])
-    assert three is not None and three.severity == "high"
+    assert reputation(2, ["a.example"]) is None  # below the volume floor
+    assert reputation(3, ["a.example"]) is None  # one site is not corroboration
 
-    five = reputation(5, ["a.example", "b.example"])
-    assert five is not None and five.severity == "critical"
+    unknown_spread = reputation(5, [])  # volume reported, spread not
+    assert unknown_spread is not None and unknown_spread.severity == "medium"
 
-    # Strong corroboration is hard evidence and can therefore reach HIGH.
+    many_sources = reputation(5, ["a.example", "b.example"])
+    assert many_sources is not None and many_sources.severity == "medium"
+    assert many_sources.confidence > unknown_spread.confidence
+
+    # Corroborated *accusations* are the thing that can reach HIGH.
     reviews = ReviewSignals(
         total_mentions=20,
         negative_mentions=5,
+        fraud_accusations=3,
         negative_source_domains=["a.example", "b.example"],
     )
     patterns = detect_patterns(user_input, DomainIntel(), reviews, sources_checked=20)
@@ -671,10 +681,15 @@ def test_company_pages_are_not_filtered_out_by_a_platform_domain() -> None:
     ]
     reviews, _evidence, _findings = heuristic_structure(results, user_input)
     assert reviews.negative_mentions == 3
+    # "reported as a scam", "fraudulent business" are accusations about the
+    # company, not merely dissatisfaction.
+    assert reviews.fraud_accusations == 3
     patterns = detect_patterns(
         user_input, DomainIntel(), reviews, sources_checked=reviews.total_mentions
     )
-    assert "negative_reputation" in {p.pattern for p in patterns}
+    accusations = [p for p in patterns if p.pattern == "fraud_accusations_against_company"]
+    assert accusations, "real scam reports must not be filtered out"
+    assert accusations[0].severity == "critical"
 
 
 @pytest.mark.asyncio

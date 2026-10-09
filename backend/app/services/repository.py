@@ -27,7 +27,7 @@ from ..schemas import (
     RiskAssessment,
     UserInput,
 )
-from .text_utils import extract_domain, normalize_name
+from .text_utils import normalize_name
 
 
 async def _get_or_create_company(session: AsyncSession, user_input: UserInput) -> Company | None:
@@ -114,54 +114,41 @@ async def _upsert_domain(session: AsyncSession, investigation: Investigation) ->
 async def count_historical_reports(
     session: AsyncSession, user_input: UserInput
 ) -> int:
-    """Independent prior reports + past investigations for this company/domain."""
-    total = 0
+    """Independent prior **reports** about this company.
 
+    Only submissions a user explicitly made count. Earlier investigations by
+    this tool are our own lookups and captured pages are evidence we gathered —
+    neither is a report *about* the company. Counting them made a genuine
+    employer look suspicious merely for having been checked before, and made the
+    same posting score higher the second time it was run (a stored ADP
+    investigation reached MODERATE purely from its own prior lookups). Reports
+    are the signal; checking is not.
+    """
     name = (user_input.company.name or "").strip()
-    if name:
-        normalized = normalize_name(name)
-        company = (
-            await session.execute(
-                select(Company).where(Company.name_normalized == normalized)
-            )
-        ).scalar_one_or_none()
-        if company:
-            total += int(
-                (
-                    await session.execute(
-                        select(func.count())
-                        .select_from(UserReport)
-                        .where(UserReport.company_id == company.id)
-                    )
-                ).scalar()
-                or 0
-            )
-            total += int(
-                (
-                    await session.execute(
-                        select(func.count())
-                        .select_from(InvestigationRecord)
-                        .where(InvestigationRecord.company_id == company.id)
-                    )
-                ).scalar()
-                or 0
-            )
+    if not name:
+        return 0
+    normalized = normalize_name(name)
+    if not normalized:
+        return 0
 
-    domain = user_input.contacts.domains[0] if user_input.contacts.domains else extract_domain(
-        user_input.company.website
-    )
-    if domain:
-        total += int(
-            (
-                await session.execute(
-                    select(func.count())
-                    .select_from(WebEvidence)
-                    .where(WebEvidence.source_domain == domain)
-                )
-            ).scalar()
-            or 0
+    company = (
+        await session.execute(
+            select(Company).where(Company.name_normalized == normalized)
         )
-    return total
+    ).scalar_one_or_none()
+    if company is None:
+        return 0
+
+    return int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(UserReport)
+                .where(UserReport.company_id == company.id)
+            )
+        ).scalar()
+        or 0
+    )
 
 
 async def persist_investigation(
