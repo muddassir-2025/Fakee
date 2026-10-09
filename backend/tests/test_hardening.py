@@ -123,3 +123,39 @@ def test_clients_honour_retry_after_header() -> None:
     first = GroqClient._retry_delay(0, None)
     later = GroqClient._retry_delay(3, None)
     assert later > first
+
+
+@pytest.mark.asyncio
+async def test_create_all_never_runs_against_postgres(monkeypatch) -> None:
+    """PostgreSQL must be Alembic-owned.
+
+    ``create_all`` on Postgres builds the tables without writing an
+    ``alembic_version`` row, so the next ``alembic upgrade head`` collides with
+    the initial migration (DuplicateTableError) and the container crash-loops.
+    Only SQLite may auto-create.
+    """
+    import app.db as db
+
+    created: list[bool] = []
+
+    def spy(_conn) -> None:  # run_sync needs a *sync* callable
+        created.append(True)
+
+    monkeypatch.setattr(db.Base.metadata, "create_all", spy)
+
+    # Postgres never creates, even when AUTO_CREATE_SCHEMA is left on.
+    monkeypatch.setattr(db.settings, "database_url", "postgresql://u:p@host/db")
+    monkeypatch.setattr(db.settings, "auto_create_schema", True)
+    await db.init_db()
+    assert created == []
+
+    # SQLite (dev and the test suite) still auto-creates.
+    monkeypatch.setattr(db.settings, "database_url", "sqlite+aiosqlite:///./data/x.db")
+    await db.init_db()
+    assert created == [True]
+
+    # The explicit opt-out still defers to Alembic.
+    created.clear()
+    monkeypatch.setattr(db.settings, "auto_create_schema", False)
+    await db.init_db()
+    assert created == []

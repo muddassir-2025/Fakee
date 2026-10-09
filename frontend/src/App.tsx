@@ -776,8 +776,13 @@ function Footer() {
           <p className="text-xs text-faint">
             Statistics are quoted as reported by the bodies listed above and dated where stated.
           </p>
-          <p className="text-xs text-faint">
-            Report fraud: {HELPLINE.portal} · {HELPLINE.number}
+          <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-faint">
+            <span>
+              Report fraud: {HELPLINE.portal} · {HELPLINE.number}
+            </span>
+            <a href="/privacy" className="underline underline-offset-4 hover:no-underline">
+              Privacy policy
+            </a>
           </p>
         </div>
       </Container>

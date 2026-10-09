@@ -5,6 +5,7 @@ The same models run on Neon PostgreSQL (production) and SQLite (local dev).
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import AsyncIterator
 
@@ -17,6 +18,8 @@ from sqlalchemy.ext.asyncio import (
 
 from .config import settings
 from .models import Base
+
+logger = logging.getLogger("app")
 
 # Ensure the local SQLite directory exists before the engine opens it.
 if settings.is_sqlite:
@@ -46,14 +49,23 @@ SessionLocal = async_sessionmaker(
 async def init_db() -> None:
     """Prepare the schema.
 
-    In development (and the test suite) tables are created directly from the
-    models. In production ``AUTO_CREATE_SCHEMA=false`` and the schema is owned
-    by Alembic migrations, which the container entrypoint applies first.
-    """
-    if not settings.auto_create_schema:
-        import logging
+    SQLite (local dev and the test suite) is created directly from the models.
 
-        logging.getLogger("app").info("AUTO_CREATE_SCHEMA=false — schema managed by Alembic")
+    PostgreSQL is **always** owned by Alembic, regardless of
+    ``AUTO_CREATE_SCHEMA``. ``create_all`` against Postgres would build the
+    tables without writing an ``alembic_version`` row, leaving a schema the
+    migrations do not know about — the next ``alembic upgrade head`` then tries
+    to create the same tables and dies with ``DuplicateTableError``. The
+    container entrypoint applies ``alembic upgrade head`` before the app starts.
+    """
+    if not settings.is_sqlite:
+        logger.info(
+            "PostgreSQL schema is owned by Alembic: AUTO_CREATE_SCHEMA is ignored. "
+            "Apply migrations with `alembic upgrade head`."
+        )
+        return
+    if not settings.auto_create_schema:
+        logger.info("AUTO_CREATE_SCHEMA=false — schema managed by Alembic")
         return
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

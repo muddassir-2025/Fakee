@@ -88,6 +88,10 @@ Captured page text is sent to **your** backend for analysis. Nothing is sent to
 Exa or any search API. Settings and the last input live in local extension
 storage only.
 
+The full policy — what is read, what is sent to the backend, what is stored, and
+what is never done — lives at `frontend/public/privacy.html` and is served on the
+deployed site at `/privacy`. Submit that URL in the Chrome Web Store listing.
+
 ## Known limitations
 
 - **Search engines can rate-limit or CAPTCHA** automated fetches, especially

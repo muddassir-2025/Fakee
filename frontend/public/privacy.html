@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy policy — Fakee</title>
+    <meta
+      name="description"
+      content="What the Fakee website and Chrome extension do with your data: what is read, what is sent, what is stored, and what is never done."
+    />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#f6f2ea" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --paper: #f6f2ea;
+        --paper-deep: #eee8db;
+        --ink: #14110c;
+        --ink-soft: #2b2519;
+        --muted: #6f6757;
+        --faint: #9a9182;
+        --line: #e1d8c7;
+        --line-strong: #cfc4ad;
+        --signal: #c2410c;
+        --signal-soft: #f6e4d8;
+        --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        --display: "Fraunces", "Iowan Old Style", Georgia, "Times New Roman", serif;
+        --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background-color: var(--paper);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 1rem;
+        line-height: 1.65;
+      }
+
+      ::selection {
+        background: var(--signal-soft);
+        color: var(--signal);
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--signal);
+        outline-offset: 3px;
+        border-radius: 2px;
+      }
+
+      a {
+        color: var(--signal);
+        text-underline-offset: 3px;
+      }
+
+      a:hover {
+        text-decoration: none;
+      }
+
+      .wrap {
+        max-width: 46rem;
+        margin: 0 auto;
+        padding: 0 1.5rem;
+      }
+
+      .masthead {
+        border-bottom: 1px solid var(--line);
+        background: color-mix(in srgb, var(--paper-deep) 40%, var(--paper));
+      }
+
+      .masthead .wrap {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding-top: 1.1rem;
+        padding-bottom: 1.1rem;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        color: var(--ink);
+        font-family: var(--display);
+        font-size: 1.05rem;
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      .brand .dot {
+        width: 0.6rem;
+        height: 0.6rem;
+        border-radius: 9999px;
+        background: var(--signal);
+      }
+
+      .eyebrow {
+        font-family: var(--mono);
+        font-size: 0.6875rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      main .wrap {
+        padding-top: 4rem;
+        padding-bottom: 4.5rem;
+      }
+
+      h1 {
+        margin: 1rem 0 0;
+        font-family: var(--display);
+        font-weight: 600;
+        font-size: clamp(2rem, 5vw, 2.85rem);
+        line-height: 1.12;
+        letter-spacing: -0.02em;
+      }
+
+      h2 {
+        margin: 3rem 0 0;
+        padding-top: 1.6rem;
+        border-top: 1px solid var(--line);
+        font-family: var(--display);
+        font-weight: 600;
+        font-size: 1.4rem;
+        line-height: 1.25;
+        letter-spacing: -0.015em;
+      }
+
+      h3 {
+        margin: 2rem 0 0;
+        font-family: var(--display);
+        font-weight: 600;
+        font-size: 1.05rem;
+      }
+
+      p {
+        margin: 1rem 0 0;
+        color: var(--ink-soft);
+      }
+
+      .lede {
+        margin-top: 1.35rem;
+        font-size: 1.1rem;
+        color: var(--muted);
+      }
+
+      .meta {
+        margin-top: 1.25rem;
+        font-family: var(--mono);
+        font-size: 0.6875rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--faint);
+      }
+
+      ul {
+        margin: 1rem 0 0;
+        padding-left: 1.15rem;
+        color: var(--ink-soft);
+      }
+
+      li {
+        margin-top: 0.6rem;
+      }
+
+      li::marker {
+        color: var(--faint);
+      }
+
+      strong {
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      code {
+        font-family: var(--mono);
+        font-size: 0.85em;
+        background: var(--paper-deep);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: 0.08em 0.32em;
+      }
+
+      .card {
+        margin-top: 2.5rem;
+        border: 1px solid var(--line-strong);
+        border-left: 3px solid var(--signal);
+        border-radius: 4px 12px 12px 4px;
+        background: color-mix(in srgb, var(--paper-deep) 60%, var(--paper));
+        padding: 1.5rem 1.6rem;
+      }
+
+      .card h2 {
+        margin: 0;
+        padding: 0;
+        border: 0;
+        font-size: 1.15rem;
+      }
+
+      .card p,
+      .card ul {
+        margin-top: 0.85rem;
+        font-size: 0.95rem;
+      }
+
+      .no {
+        display: grid;
+        gap: 0.5rem 1.5rem;
+        margin-top: 1.15rem;
+        padding: 0;
+        list-style: none;
+      }
+
+      @media (min-width: 40rem) {
+        .no {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      .no li {
+        margin: 0;
+        display: flex;
+        gap: 0.6rem;
+        font-size: 0.95rem;
+      }
+
+      .no li::before {
+        content: "×";
+        flex: none;
+        color: var(--signal);
+        font-weight: 600;
+      }
+
+      footer {
+        border-top: 1px solid var(--line);
+        background: color-mix(in srgb, var(--paper-deep) 40%, var(--paper));
+      }
+
+      footer .wrap {
+        padding-top: 2.25rem;
+        padding-bottom: 2.75rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1.5rem;
+        align-items: baseline;
+        justify-content: space-between;
+      }
+
+      footer p {
+        margin: 0;
+        font-size: 0.8rem;
+        color: var(--faint);
+      }
+    </style>
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="wrap">
+        <a class="brand" href="/"><span class="dot" aria-hidden="true"></span>Fakee</a>
+        <span class="eyebrow">Privacy</span>
+      </div>
+    </header>
+
+    <main>
+      <div class="wrap">
+        <h1>Privacy policy</h1>
+        <p class="lede">
+          Fakee investigates job and internship postings for scam signals. This page explains exactly
+          what the website and the Chrome extension read, send and keep — and what they never do.
+        </p>
+        <p class="meta">Last updated 9 October 2026 · website and Chrome extension</p>
+
+        <div class="card">
+          <h2>The short version</h2>
+          <ul>
+            <li>
+              The posting text you paste is sent to the backend that performs the investigation,
+              which forwards it to an LLM provider for reading and structuring.
+            </li>
+            <li>
+              Searching and page reading happen <strong>in your own browser</strong>. The extension
+              builds queries from your posting and fetches the pages those searches return.
+            </li>
+            <li>
+              <strong>Nothing is stored about a search.</strong> A company is only recorded when you
+              explicitly report a posting.
+            </li>
+            <li>
+              No accounts, no cookies, no analytics, no advertising, and no reading of pages you
+              did not ask it to check.
+            </li>
+          </ul>
+        </div>
+
+        <h2>1. What the extension reads</h2>
+        <p>
+          The extension only acts when you give it a posting. From the text you paste it derives
+          company names, domains and contact details, turns those into search queries, and then runs
+          those searches and fetches the result pages <strong>using your browser and your
+          connection</strong>. It does not read your browsing history, your bookmarks, other tabs, or
+          pages unrelated to the investigation it is running.
+        </p>
+        <p>
+          The extension requests broad host permissions (<code>&lt;all_urls&gt;</code>) because it
+          must be able to fetch result pages from arbitrary sites, which is what allows the
+          investigation to run without a paid search API. Those fetches happen only during a run you
+          start.
+        </p>
+
+        <h2>2. What leaves your computer</h2>
+        <p>When you run an investigation, the following is sent to the backend you have configured:</p>
+        <ul>
+          <li>the posting text you pasted (or typed into the website panel);</li>
+          <li>the readable text of each page the crawler captured, together with its URL.</li>
+        </ul>
+        <p>
+          The backend then uses that content as follows. Each item is a separate party, disclosed
+          here because it is part of how a verdict is produced:
+        </p>
+        <ul>
+          <li>
+            <strong>LLM provider (Groq).</strong> The posting text and the captured page evidence are
+            sent for extraction and summarisation — the "what the user reported" and "what the
+            investigation found" steps. If the deployment has no LLM key configured, no such request
+            is made and deterministic heuristics run locally instead. Data sent to a provider is
+            handled under that provider's own terms.
+          </li>
+          <li>
+            <strong>Domain lookups.</strong> The domain named in the posting is checked against
+            public sources — registry (RDAP), DNS and HTTPS. Only that domain is looked up.
+          </li>
+          <li>
+            <strong>Search provider (Exa) — off by default.</strong> Server-side search is disabled
+            unless the operator explicitly enables it. The extension never uses it, because your own
+            browser performs the search.
+          </li>
+        </ul>
+
+        <h2>3. What is stored</h2>
+        <h3>On your machine</h3>
+        <p>
+          The extension keeps two things in Chrome's local extension storage
+          (<code>chrome.storage.local</code>): your settings (backend API base, search provider, and
+          an optional search API key if you added one), and the last posting you pasted so it is
+          still there when you reopen the side panel. Nothing else is stored, and clearing the
+          extension's data or uninstalling it removes both.
+        </p>
+        <h3>On the backend</h3>
+        <ul>
+          <li>
+            <strong>Investigations are not stored.</strong> Storage is opt-in and off by default, so
+            running a check leaves no record of what you pasted.
+          </li>
+          <li>
+            <strong>Reports are stored.</strong> If you press "Report as scam", the description you
+            submit is stored and linked to a company record so repeated reports can be correlated.
+            This is the only path that persists what you wrote, and it only happens when you ask.
+          </li>
+          <li>
+            <strong>Company-level cache.</strong> A finished result may be cached for up to 24 hours
+            so a repeated check of the same company does not re-run the whole pipeline. The cache
+            holds public intelligence only — your raw text is stripped before anything is cached.
+          </li>
+          <li>
+            <strong>Rate limiting.</strong> Your IP address is counted in memory for a rolling
+            window to keep the service available. It is not written to the database.
+          </li>
+          <li>
+            <strong>Logs and metrics.</strong> Each request produces an access-log line with method,
+            path, status, duration, client IP and a generated request id. Request bodies are not
+            logged. Metrics are process-local counters by route and status.
+          </li>
+        </ul>
+
+        <h2>4. What is never done</h2>
+        <ul class="no">
+          <li>No user accounts and no sign-in.</li>
+          <li>No cookies or cross-site tracking.</li>
+          <li>No analytics or advertising SDKs.</li>
+          <li>No selling or renting of personal data.</li>
+          <li>No reading of pages unrelated to a run.</li>
+          <li>No sharing beyond the providers in section 2.</li>
+        </ul>
+
+        <h2>5. Use of data and Chrome Web Store compliance</h2>
+        <p>
+          Data the extension handles — the posting you paste and the pages it captures — is used
+          only to produce the investigation you asked for. Its use is limited to that purpose, and it
+          complies with the Chrome Web Store User Data Policy, including the Limited Use
+          requirements. Data is not transferred to third parties except as described in section 2,
+          and never for advertising, creditworthiness, or lending purposes.
+        </p>
+
+        <h2>6. Retention and your controls</h2>
+        <ul>
+          <li>
+            Clear the last pasted posting from <strong>Settings</strong> in the side panel, or clear
+            the extension's storage — it is gone.
+          </li>
+          <li>
+            Point the extension at <strong>your own backend</strong>. The API base is a setting, so
+            you decide which server receives anything at all.
+          </li>
+          <li>
+            Do not paste more than the posting. A job message is all the investigation needs; there
+            is no reason to include identity documents, bank details or other personal records.
+          </li>
+          <li>
+            Cached company results expire on their own within 24 hours. Stored reports can be removed
+            on request through the contact channel below.
+          </li>
+        </ul>
+
+        <h2>7. The website</h2>
+        <p>
+          The landing page is a static site. It sets no cookies, runs no analytics, and sends nothing
+          about you to its own server. It loads its two typefaces from Google Fonts, which means
+          Google receives your IP address and user-agent when the page loads.
+        </p>
+        <p>
+          If you have the extension installed, the page can open a local connection to it so a check
+          runs inline. In that case the text you type is handed to your extension and the resulting
+          verdict is rendered on the page — the website itself never receives or stores it.
+        </p>
+
+        <h2>8. Self-hosted and other deployments</h2>
+        <p>
+          Fakee is open source, and anyone may run their own copy. This policy describes what the
+          software does. If you are using a deployment operated by someone else, that operator is the
+          data controller for anything stored on their backend, and their contact details apply. If
+          you run your own, you are the operator.
+        </p>
+
+        <h2>9. Children</h2>
+        <p>
+          The service is not directed at children under 13, and it does not knowingly collect
+          personal information from them.
+        </p>
+
+        <h2>10. Changes to this policy</h2>
+        <p>
+          Material changes will be published on this page with a new "last updated" date. Continued
+          use after a change means you accept the updated policy.
+        </p>
+
+        <h2>11. Contact</h2>
+        <p>
+          Questions, corrections or a deletion request? Open an issue at
+          <a href="https://github.com/muddassir-2025/Fakee/issues" target="_blank" rel="noreferrer noopener"
+            >github.com/muddassir-2025/Fakee/issues</a
+          >.
+        </p>
+      </div>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <p>Fakee — evidence-based fake job and internship detection.</p>
+        <p><a href="/">Back to the site</a></p>
+      </div>
+    </footer>
+  </body>
+</html>

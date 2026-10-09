@@ -344,6 +344,34 @@ Build from the existing `backend/Dockerfile` (the container entrypoint runs
 - `CORS_ORIGINS` — include your Vercel origin, e.g. `https://<your-app>.vercel.app`
 - `ENVIRONMENT=production` — disables interactive docs and internal error details
 
+The **container entrypoint runs `alembic upgrade head` before serving**, and on
+PostgreSQL the schema is owned by Alembic alone. `AUTO_CREATE_SCHEMA` is ignored
+there (it only applies to SQLite), because `create_all` against Postgres builds
+tables with no `alembic_version` row — a schema the migrations do not know about.
+
+#### If the deploy crash-loops with `relation "companies" already exists`
+
+That means the database was previously populated outside the entrypoint (for
+example, running `scripts/start-backend.sh` locally with a Neon `DATABASE_URL` in
+your `.env`). The tables exist but Alembic has no record of them. Adopt the
+existing schema, then confirm it really matches the models:
+
+```bash
+cd backend
+export DATABASE_URL="postgresql://..."   # your Neon URL
+python -m alembic stamp head           # the tables already match head
+python -m alembic check                # must print "No new upgrade operations detected."
+```
+
+If `alembic check` reports drift, the database is not at head — and if there is
+no data to keep, reset it instead and let Alembic build it:
+
+```bash
+psql "$DATABASE_URL" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+```
+
+Then redeploy.
+
 ### Extension package
 
 ```bash
@@ -356,7 +384,11 @@ deployed API base is baked in as the default (it warns you if the build still
 points at localhost). Upload that zip in the
 [Chrome Web Store developer dashboard](https://chrome.google.com/webstore/devconsole).
 The listing needs screenshots, a privacy-policy URL, and a justification for
-`<all_urls>` (it has to read the result pages a search returns).
+`<all_urls>` (it has to read the result pages a search returns). The policy page
+is committed at `frontend/public/privacy.html` and is served on the deployed site
+at `/privacy` — use that URL in the listing. It states what the extension reads,
+what is sent to the backend, what is stored (and that a plain search stores
+nothing), and what is never done.
 
 Once approved, the store URL ends with the extension id. Put that URL in
 `EXTENSION.storeUrl` (or set `VITE_EXTENSION_STORE_URL`) so the website can detect
