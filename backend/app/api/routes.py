@@ -73,6 +73,23 @@ def _base_health() -> dict:
     }
 
 
+def also_answer_head(target: APIRouter, path: str, endpoint) -> None:  # noqa: ANN001
+    """Serve `path` for HEAD as well, without documenting a second operation.
+
+    Uptime monitors (UptimeRobot, Better Stack, Render's own health check) send
+    HEAD by default, and FastAPI — unlike plain Starlette — does not add HEAD to
+    a GET route, so without this every probe would get a 405.
+
+    HEAD gets its own hidden route rather than being added to the GET route's
+    `methods`: FastAPI derives an operation id per *route*, so one route carrying
+    both verbs emits two operations under the same id (and warns about it), which
+    breaks Swagger anchors and generated clients. Starlette only falls back to a
+    partial path match when nothing matches exactly, so HEAD lands here while GET
+    keeps the documented route.
+    """
+    target.add_api_route(path, endpoint, methods=["HEAD"], include_in_schema=False)
+
+
 @router.get("/health/live")
 async def health_live() -> dict:
     """Liveness: the process is up and serving (no dependency checks)."""
@@ -96,6 +113,27 @@ async def health() -> JSONResponse:
         **_base_health(),
     }
     return JSONResponse(status_code=200 if db_ok else 503, content=payload)
+
+
+# Infrastructure probes go to an unprefixed path by convention, so the same
+# three handlers are served at the root too. They describe the process rather
+# than the product API, so they sit outside `/api` deliberately: a monitor should
+# not have to know the API version to ask whether the service is up.
+probe_router = APIRouter()
+for _path, _endpoint in (
+    ("/health", health),
+    ("/health/live", health_live),
+    ("/health/ready", health_ready),
+):
+    probe_router.add_api_route(_path, _endpoint, methods=["GET"], response_model=None)
+    also_answer_head(probe_router, _path, _endpoint)
+
+for _path, _endpoint in (
+    ("/health", health),
+    ("/health/live", health_live),
+    ("/health/ready", health_ready),
+):
+    also_answer_head(router, _path, _endpoint)
 
 
 async def _run_stage(

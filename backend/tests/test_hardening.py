@@ -27,6 +27,26 @@ async def client():
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_health_answers_probes_at_the_root_and_over_head(client: httpx.AsyncClient) -> None:
+    """Uptime monitors probe an unprefixed path and send HEAD by default.
+
+    FastAPI does not add HEAD to a GET route the way plain Starlette does, so
+    both properties have to be asserted: registered at the root, and reachable
+    with HEAD. Without them a monitor sees 404 or 405 and reports the service
+    as down while it is actually healthy.
+    """
+    for path in ("/health", "/health/live", "/health/ready"):
+        assert (await client.get(path)).status_code == 200, path
+        head = await client.head(path)
+        assert head.status_code == 200, f"HEAD {path} -> {head.status_code}"
+
+    # The prefixed routes stay HEAD-capable too.
+    assert (await client.head("/api/health/live")).status_code == 200
+    assert (await client.head("/")).status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_health_reports_database_ready(client: httpx.AsyncClient) -> None:
     response = await client.get("/api/health")
     assert response.status_code == 200

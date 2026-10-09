@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from .api.routes import router
+from .api.routes import also_answer_head, probe_router, router
 from .config import settings
 from .db import engine, init_db
 from .middleware import (
@@ -86,6 +86,8 @@ if settings.trusted_host_list != ["*"]:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_host_list)
 
 app.include_router(router, prefix=settings.api_prefix)
+# Unprefixed health endpoints for uptime monitors and platform health checks.
+app.include_router(probe_router)
 
 
 def _request_id(request: Request) -> str | None:
@@ -111,3 +113,8 @@ async def root() -> dict:
         "docs": "/docs" if settings.docs_enabled_effective else None,
         "api": settings.api_prefix,
     }
+
+
+# Monitors sometimes probe the bare origin; answer HEAD without a second
+# documented operation (see `also_answer_head`).
+also_answer_head(app.router, "/", root)
