@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import re
 
+from ..config import settings
 from ..schemas import (
     CompanyInfo,
     CommunicationChannels,
@@ -23,6 +24,7 @@ from .text_utils import (
     extract_emails,
     extract_phones,
     extract_urls,
+    has_unnegated,
 )
 
 logger = logging.getLogger(__name__)
@@ -73,10 +75,24 @@ CLAIM_KEYWORDS = (
 )
 
 
+# "Levroxen LLC", "Acme Pvt Ltd", "Foo Inc." at the start of a line/title.
+LEGAL_ENTITY_RE = re.compile(
+    r"^((?:[A-Z][\w&.'\-]*\s+){0,4}(?:LLC|L\.L\.C|Ltd|Limited|Inc|Incorporated|Corp|Corporation|"
+    r"Pvt\.?\s*Ltd\.?|Private\s+Limited))\b",
+    re.MULTILINE,
+)
+
+
 def _find_company_name(text: str) -> str | None:
     match = COMPANY_LINE_RE.search(text)
     if match:
         return match.group(1).strip().splitlines()[0][:120]
+
+    # A legal-entity suffix on the first line is a strong company-name cue
+    # (e.g. "Levroxen LLC - Online Assessment Registration").
+    legal = LEGAL_ENTITY_RE.search(text)
+    if legal:
+        return legal.group(1).strip()[:120]
 
     # "HCLTech Hiring", "ADP – GPT Intern", "Company - Feuji"
     for pattern in (
@@ -146,8 +162,9 @@ def heuristic_extract(text: str) -> UserInput:
     money_amount: str | None = None
     money_reason: str | None = None
     money_detected = False
+    # Negation-aware: "No registration fee" must NOT be read as a fee request.
     for kw in MONEY_KEYWORDS:
-        if kw in lower:
+        if has_unnegated(lower, [kw]):
             money_detected = True
             money_reason = kw.strip()
             break
@@ -198,11 +215,32 @@ def heuristic_extract(text: str) -> UserInput:
     )
 
 
+def heuristic_is_reliable(user_input: UserInput) -> bool:
+    """Whether the deterministic extraction is good enough to skip Groq.
+
+    The heuristics are reliable when they already identify *who* the posting is
+    about and at least one concrete signal (money, a contact, a channel, or a
+    notable claim). Groq is reserved for the messy/ambiguous cases it actually
+    improves, which saves a whole request per investigation.
+    """
+    has_subject = bool(user_input.company.name) or bool(user_input.contacts.domains)
+    has_signal = bool(
+        user_input.money_request.detected
+        or user_input.contacts.domains
+        or user_input.contacts.emails
+        or user_input.communication.whatsapp
+        or user_input.communication.telegram
+        or user_input.claims
+    )
+    return has_subject and has_signal
+
+
 async def extract_user_input(text: str) -> UserInput:
     """Return JSON 1, preferring Groq and falling back to heuristics."""
     fallback = heuristic_extract(text)
 
-    if groq_client.enabled:
+    skip_groq = settings.prefer_heuristic_extraction and heuristic_is_reliable(fallback)
+    if groq_client.enabled and not skip_groq:
         parsed = await groq_client.chat_json(
             SYSTEM_PROMPT, f"RAW USER TEXT:\n\"\"\"\n{text[:8000]}\n\"\"\""
         )

@@ -1,0 +1,132 @@
+{
+  "note": "Seed dataset from the research pack. 'real' entries are real posts collected from a college placement WhatsApp group and labelled by public-evidence review; synthetic entries are written from documented scam patterns and are clearly marked source=synthetic. Used only for regression guarding, not as a measured accuracy claim.",
+  "date_checked": "2026-10-05",
+  "posts": [
+    {
+      "id": "JP-001",
+      "source": "whatsapp_college",
+      "verdict": "unverified",
+      "label": "real",
+      "text": "AI Internship Opportunity - 2026 & 2027 Batch\n\nDear Students,\n\nA Remote AI Internship opportunity is available with eTeam for students interested in Generative AI and AI Engineering.\n\nEligibility:\n- 2026 & 2027 Graduates\n- College NOC is mandatory\n- Minimum 3 months of prior AI internship experience (Mandatory)\n- Strong coding skills (must be able to code independently without AI tools)\n\nWork Areas: LLMs, RAG, Prompt Engineering, LangChain, Dify.ai, AI Agents, AI Automation\n\nInternship Details:\n- Mode: Remote\n- Duration: 6 Months\n- Shift: 3:00 PM - 11:00 PM\n- Stipend: Attractive\n\nPlease share your updated resume at: careers@eteaminc.com\n\nNote: Please apply only if you satisfy the mandatory requirements mentioned above."
+    },
+    {
+      "id": "JP-002",
+      "source": "college_tp_cell",
+      "verdict": "real_verified",
+      "label": "real",
+      "text": "Adobe University Hackathon 2026 - Registration Open!\n\nDear Students,\n\nAdobe invites engineering students to participate in the Adobe University Hackathon 2026.\n\nEligibility: B.Tech / B.E. (All Branches), M.Tech / M.E. Students from 1st Year to Final Year are eligible.\n\nTeam Size: 2-3 students from the same college.\n\nWhy Participate? Pre-Placement Internship/Interview opportunities; work on real problem statements from Adobe product teams; mentorship from Adobe engineers. Winning Team: Apple MacBook Pro for each team member.\n\nRegistration Link: https://careers.adobe.com/us/en/adobe-hackathon\nLast Date to Register: 8 August 2026 (11:59 PM IST)\n\nTraining & Placement Cell"
+    },
+    {
+      "id": "JP-003",
+      "source": "whatsapp_college",
+      "verdict": "likely_real",
+      "label": "real",
+      "text": "PM Internship Camp - Hyderabad\n\nInfosys Internship Opportunity:\nEligibility:\n- Age between 18 and 25 years\n- Any stream of B.E/B.Tech (2024-25 and 2025-26 pass-outs with no active backlogs.)\nPercentage: 68% in B Tech.\n\nRegistration Link: https://tinyurl.com/interninfy\nRegistration Last Date: 19th July 2026\n\nInternship Role: AI Intern, Software Developer Intern\nPool Campus Recruitment Drive on 26th July 2026\nPackage: 4 LPA\n\nSelection Process: 1. Pre Placement Talk 2. Written Test 3. TR 4. HR\n\nVenue: Stanley College of Engineering and Technology for Women. Chappel Road, Abids, Hyderabad."
+    },
+    {
+      "id": "JP-004",
+      "source": "college_tp_cell",
+      "verdict": "likely_real",
+      "label": "real",
+      "text": "Dear Students,\n\nThe Amazon CS Hiring Process is scheduled for 06th and 07th July 2026.\n\nDue to the overwhelming response, the hiring drive will be conducted across two campuses:\n06th July 2026 - CVR College of Engineering, Hyderabad\n07th July 2026 - Anurag University, Hyderabad\n\nReporting Time: 09:00 AM\n\nSelection Process:\n- JAM Session\n- Round 2: Assessment\n- Candidates shortlisted in the assessment will be invited for the final interview at the Amazon Office.\n\nAll candidates are advised to report on time and carry the required documents as mentioned in the email."
+    },
+    {
+      "id": "JP-005",
+      "source": "college_tp_cell",
+      "verdict": "suspicious",
+      "label": "review",
+      "text": "Immediate Placement Opportunity - QuickHyre AI (Bangalore)\n\nPosition: AI Data Collection Associate (Non-Technical)\nProject Duration: 6 Months\nLocation: Bangalore\nVacancies: Up to 200 Candidates\n\nEligibility: Any Graduate / Engineering / Diploma / Final-Year Students; Freshers from any academic background; Willing to relocate to Bangalore for 6 months.\n\nSalary: Rs 23,000 - Rs 45,000+ per month (based on approved project hours & quality benchmarks)\n\nRole Highlights: Non-technical AI Data Collection Project; work involves using VR headsets and specialized data collection devices; No coding or technical skills required; complete training will be provided.\n\nShift Timings: Female Candidates: 9:00 AM - 7:00 PM (Day Shift Only); Male Candidates: 9:00 AM - 7:00 PM / 9:00 PM - 7:00 AM (Night Shift)\n\nBenefits:\nNo Registration Fee\nNo Application Fee\nNo Training Fee\nNo Deposit\nNo Bond\nImmediate Joining (Candidates available within 48 hours preferred)\n\nTraining and Placement officer\nmail id: placements@mjcollege.ac.in"
+    },
+    {
+      "id": "JP-006",
+      "source": "college_tp_cell",
+      "verdict": "unverified",
+      "label": "review",
+      "text": "Company - IIIT Guwahati\nRole - Research Project Intern (AI/ML)\nBatch - 2025/2026/2027\nStipend - Rs 15,000 - Rs 20,000/month (Food + Hostel Provided)\nLocation - IIIT Guwahati (Campus)\n\nEligibility: Undergraduate and postgraduate students from Computer Science & Engineering and allied disciplines. Internship begins in July 2026. Last date to apply: July 14, 2026. Online selection date: July 17, 2026.\n\nInternship Details: Duration: 14 months. Certificate will be provided upon successful completion. On-campus participation is preferred.\n\nHow to Apply: https://docs.google.com/forms/d/e/1FAIpQLSdg9MWlwT3BHgRzy4Gn_0D7CEZqUBvpTLt21U0s0C_am_fFRA/viewform"
+    },
+    {
+      "id": "JP-007",
+      "source": "whatsapp_college",
+      "verdict": "unverified",
+      "label": "review",
+      "text": "Company - Feuji\nRole - AI & Data Analytics Intern (+PPO)\nBatch - 2025/2026/2027\nStipend - Rs 30,000/month\nLocation - Hyderabad\n\nTechnical Skills: Python for data analysis and automation; SQL; Microsoft Excel; Power BI; Data Analytics; basic Machine Learning; AI concepts.\n\nEducational Qualification: Pursuing or recently completed a Bachelor's or Master's degree in Computer Science, IT, Data Science or a related field.\n\nHow to Apply: https://www-feuji-com.filesusr.com/html/dfd9f1_6503d5e7658b6db2b7be3dd4114a2692.html?job_id=z5G7h3l6a1kMvyS65NP3c2h9sVUpHn6hkIaMrciQ8m8="
+    },
+    {
+      "id": "JP-008",
+      "source": "college_tp_cell",
+      "verdict": "suspicious",
+      "label": "review",
+      "text": "Levroxen LLC - Online Assessment Registration (Important)\n\nLevroxen LLC has initiated the registration process for the upcoming Online Assessment. All eligible students are instructed to complete their registration within the specified timeline.\n\nAssessment Platform: https://www.exametryx.com\n\nImportant Dates:\nRegistration Deadline: 05 August 2026, 2:00 PM (IST)\nOnline Assessment: 06 August 2026 from 2:00 PM (IST) onwards\n\nRegistration Instructions: Visit the platform, click Sign In, select Don't have an account? Sign Up. Register using your Full Name, a valid email address, select your institute carefully from the dropdown, create a strong password.\n\nTraining & Placement Cell"
+    },
+    {
+      "id": "JP-009",
+      "source": "college_tp_cell",
+      "verdict": "real_verified",
+      "label": "real",
+      "text": "We are pleased to announce a series of Project-Based Learning (PBL) Academic Internships designed to equip students with industry-relevant skills.\n\nThese internships are being conducted by CSRBOX in association with AICTE. Domains: Big Data & Business Management; Gen AI & Cloud Computing; AI Automation & Intelligent Solutions.\n\nThese internships provide practical exposure through real-world projects, expert-led masterclasses, access to IBM SkillsBuild learning resources, and 60-hour Certification upon successful completion.\n\nThis is a free of cost CSR initiative.\n\nKindly register through the registration link: https://forms.gle/xhAgHmrSqFGkWci49"
+    },
+    {
+      "id": "JP-010",
+      "source": "whatsapp_college",
+      "verdict": "likely_real",
+      "label": "real",
+      "text": "ADP - GPT Interns Hyderabad (IND169248)\n\nTechnology Internship Opportunity\nLocation: Hyderabad\nCompany: ADP\nPosted Date: 17 June 2026\nRole: GPT Intern (Technology)\n\nEligibility: B.Tech students (CSE / IT / AI & ML / Data Science); 3rd Year / Final Year students; 70%+ academic record preferred; No active backlogs.\n\nSkills Required: Programming: Python / Java / .NET; Knowledge of DBMS & SQL; Basics of AI/ML, GenAI & LLMs preferred.\n\nInternship Duration: 3 Months\nSelection Process: Online Assessment -> Technical Interviews -> HR Discussion\n\nApply here: https://jobs.adp.com/en/jobs/ind169248/gpt-interns-hyd-169248/"
+    },
+    {
+      "id": "JP-011",
+      "source": "college_tp_cell",
+      "verdict": "likely_real",
+      "label": "real",
+      "text": "Myntra WeForShe Hackerramp 2026 is now open for registrations.\n\nPlease share this opportunity with eligible women students and encourage them to participate.\n\nRewards worth Rs 5.25 Lakhs\nInterview opportunities with Myntra for top performers\n\nEligible: B.E./B.Tech (3rd & 4th Year) and Dual Degree (4th & 5th Year) women students (Full-Time)\n\nStudent Registration Link: https://eej.at/jCUF0fi2"
+    },
+    {
+      "id": "JP-012",
+      "source": "whatsapp_college",
+      "verdict": "likely_real",
+      "label": "real",
+      "text": "HCLTech Hiring - Python Intern Opportunity\n\nDear Students,\n\nWe are pleased to inform you about an exciting internship opportunity with HCLTech.\n\nRole: Python Intern\nLocation: Nagpur, India\nEligibility: Freshers (0-1 Years)\nStipend: Rs 8,300 - Rs 58,275 per month\nWork Mode: Work-from-home option available\n\nSkills Required: Python, JavaScript, SQL, Java, Basic Software Concepts\n\nApply Here: https://lnkd.in/gXWpaXnu"
+    },
+    {
+      "id": "SYN-001",
+      "source": "synthetic",
+      "verdict": "fake",
+      "label": "fake",
+      "text": "URGENT HIRING - WORK FROM HOME\nData Entry / Form Filling Job. No experience needed. 12th pass / any graduate.\nSalary: Rs 35,000 per month (only 2-3 hours/day)\nLimited seats - only 20 positions left!\nPay Rs 1,500 refundable registration fee to confirm your seat. Refund after first salary.\nSend your Aadhaar + PAN + bank details on WhatsApp.\nApply TODAY. Joining immediately."
+    },
+    {
+      "id": "SYN-002",
+      "source": "synthetic",
+      "verdict": "fake",
+      "label": "fake",
+      "text": "Part-time job from home\nEarn Rs 3,000-Rs 8,000 daily!\nWork: like and rate products / YouTube videos. Just 30 minutes a day.\nGenuine company, payment same day. Students & housewives welcome.\nJoin our Telegram group: t.me/XXXXXXXX\nNo interview. No skills needed."
+    },
+    {
+      "id": "SYN-003",
+      "source": "synthetic",
+      "verdict": "fake",
+      "label": "fake",
+      "text": "Congratulations! You are selected for Software Trainee at a Big IT Company.\nCTC: Rs 6.5 LPA. Offer letter attached.\nTo complete onboarding, please pay Rs 4,999 as laptop security deposit and ID card charges (refundable after 3 months).\nSend payment screenshot to hr-careers-xxxx@gmail.com\nNote: Offer will be cancelled if payment is not made within 24 hours."
+    },
+    {
+      "id": "SYN-004",
+      "source": "synthetic",
+      "verdict": "fake",
+      "label": "fake",
+      "text": "Remote Personal Assistant - $450/week - No experience required\nOur client will mail you a check to purchase office equipment from our approved vendor. Deposit the check, keep $450 as your first week pay, and send the remaining balance via gift cards to our vendor. Reply with your full name, address, phone number and SSN to begin."
+    },
+    {
+      "id": "SYN-005",
+      "source": "synthetic",
+      "verdict": "fake",
+      "label": "fake",
+      "text": "Google / Microsoft AI Internship 2026 - Work From Home\nStipend: Rs 30,000/month | Duration: 3 months | 100% placement guarantee\nEligibility: Any student, no skills required, no interview\nPay Rs 2,999 one-time training & certificate fee to confirm your slot (limited to first 50 students)\nRegister: bit.ly/xxxxxx   WhatsApp for payment details."
+    },
+    {
+      "id": "SYN-006",
+      "source": "synthetic",
+      "verdict": "fake",
+      "label": "fake",
+      "text": "Parcel Forwarding Executive - Work From Home\nReceive packages at your home address, repack them and forward to our overseas office. We provide free shipping labels.\nRs 40,000/month. No experience needed. Start this week.\nContact: parcelhr.jobs@example-mail.com"
+    }
+  ]
+}

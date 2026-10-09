@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Design tokens.
+
+   The palette is deliberately warm and paper-like rather than the usual SaaS
+   blue/violet: this is an investigative tool, so it borrows from newsprint —
+   ink on off-white, a hairline rule, and a single burnt-orange "signal" accent
+   reserved for warnings. Fraunces gives headlines a real editorial voice;
+   Inter keeps body copy quiet.
+--------------------------------------------------------------------------- */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Fraunces", "Iowan Old Style", Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --color-paper: #f6f2ea;
+  --color-paper-deep: #eee8db;
+  --color-ink: #14110c;
+  --color-ink-soft: #2b2519;
+  --color-muted: #6f6757;
+  --color-faint: #9a9182;
+  --color-line: #e1d8c7;
+  --color-line-strong: #cfc4ad;
+
+  --color-signal: #c2410c;
+  --color-signal-soft: #f6e4d8;
+
+  --color-moss: #3f7f5b;
+  --color-amber: #b7791f;
+  --color-crimson: #9b1c1c;
+
+  --breakpoint-xs: 26rem;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv05";
+  }
+
+  ::selection {
+    background: var(--color-signal-soft);
+    color: var(--color-signal);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-signal);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 40;
+    letter-spacing: -0.015em;
+  }
+}
+
+@layer components {
+  /* Small-caps eyebrow labels used above section headings. */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  /* The hairline rules that carry the newsprint feel. */
+  .rule {
+    border-top: 1px solid var(--color-line);
+  }
+
+  /* A subtle paper grain, layered so it never interferes with text. */
+  .grain::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.5;
+    background-image: radial-gradient(
+      color-mix(in srgb, var(--color-ink) 7%, transparent) 0.5px,
+      transparent 0.5px
+    );
+    background-size: 4px 4px;
+  }
+}

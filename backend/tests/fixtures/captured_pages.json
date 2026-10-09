@@ -1,0 +1,215 @@
+{
+  "note": "Labelled captured-page scenarios for the evidence-selection step. Each scenario mimics what the extension/Exa captures (ordered roughly by query category), then states which pages the prompt builder is expected to keep once the per-investigation character budget (settings.groq_evidence_max_chars) is applied. Used to guard against positional truncation silently dropping the most relevant evidence. Not a claim of measured accuracy.",
+  "page_boilerplate": "Skip to main content. Home About Contact Privacy Policy Terms of Service Cookie Settings. We use cookies to improve your experience on this site. By continuing to browse you agree to our use of cookies. Accept all cookies. Manage preferences. Essential cookies only. This site uses cookies and similar technologies to personalise content, provide social media features and analyse traffic. Search this site. Browse by category. Latest Articles. Most Popular. Trending Now. Recommended for you. Sponsored content. Advertisements. Related posts. You may also like. Share this article. Follow us on Facebook, Twitter, X, Instagram, LinkedIn, YouTube, Telegram and WhatsApp. Subscribe to our newsletter for the latest updates delivered to your inbox. Enter your email address. Sign up. By signing up you agree to our terms and conditions and acknowledge our privacy policy. About us. Our team. Editorial guidelines. Corrections. Advertise with us. Contact the newsroom. Work with us. Write for us. Submit a tip. Report an error. Careers. Sitemap. Archive. Accessibility statement. Cookie policy. Do not sell my personal information. Copyright notice. All rights reserved. Reproduction in whole or in part without written permission is prohibited. The views expressed in the comments section are those of the authors and do not necessarily reflect the position of this website. Comments are moderated and may take some time to appear. Please keep discussion civil and on topic. Report abuse. Load more comments. Show more. Show less. Read next. Continue reading. Back to top. This material may not be published, broadcast, rewritten or redistributed. Third-party trademarks are the property of their respective owners and are used here for identification purposes only. This article is for informational purposes and does not constitute professional advice. Consult a qualified professional before acting on any information found here. Some links on this page may be affiliate links. We may earn a commission at no extra cost to you. This helps support our independent journalism. Thank you for reading. If you found this useful please consider sharing it with others who might benefit. Follow the author for more content like this. Explore more topics. Browse our full archive of articles. Newsletter. Podcast. Videos. Events. Community forum. Job board. Marketplace. Sponsors and partners. Advertise here.",
+  "scenarios": [
+    {
+      "id": "late-evidence",
+      "description": "The incriminating pages are captured last. A positional (first-N) truncation drops them; relevance ranking must keep them.",
+      "company": "QuickHyre AI Solutions",
+      "website": "https://quickhyre-careers.xyz",
+      "intro_text": "Company: QuickHyre AI Solutions\nRole: AI Data Collection Associate\nThey contacted me on WhatsApp and said I was selected without an interview.\nThey asked me to pay Rs 1,500 registration fee to confirm my seat.\nWebsite: https://quickhyre-careers.xyz",
+      "pages": [
+        {
+          "category": "company_existence",
+          "title": "QuickHyre AI Solutions — Company Overview",
+          "url": "https://directory-1.example/quickhyre",
+          "source_domain": "directory-1.example",
+          "snippet": "QuickHyre AI Solutions is listed in this business directory as a technology services provider operating out of Bangalore. The directory entry summarises the company profile, its stated industry classification, the year it was added to the directory, and the contact details it supplied about itself. Directory listings of this kind are self-reported and are not an independent verification of the company. QuickHyre AI Solutions appears alongside thousands of other small firms in the same category. This page contains no information about hiring practices, recruitment channels, candidate experiences, or any dispute involving QuickHyre AI Solutions. It is included because a search for the company name returns it, but it offers no reputation signal either for or against the company."
+        },
+        {
+          "category": "company_existence",
+          "title": "QuickHyre AI Solutions | LinkedIn",
+          "url": "https://www.linkedin.com/company/quickhyre",
+          "source_domain": "linkedin.com",
+          "snippet": "A LinkedIn company page for QuickHyre AI Solutions showing a short About section, an employee count range, a headquarters location, and a handful of recent posts describing open roles. Company pages on LinkedIn are maintained by the employer themselves or by people acting on their behalf, so the content reflects what the company chooses to publish rather than an independent assessment. The page lists a small number of employees. There are no reviews, no candidate complaints, and no discussion of fees or messaging-app recruitment on this page about QuickHyre AI Solutions. It establishes only that a page exists under this name."
+        },
+        {
+          "category": "company_reviews",
+          "title": "Working at QuickHyre AI Solutions — reviews",
+          "url": "https://reviews-2.example/quickhyre",
+          "source_domain": "reviews-2.example",
+          "snippet": "Employee reviews for QuickHyre AI Solutions are sparse. The reviews that exist describe ordinary workplace matters such as the hybrid schedule, manager communication, and the quality of the office cafeteria. None of the reviewers describe paying money to obtain their position, none mention recruitment over messaging apps, and none describe being asked for a registration or training fee. The overall sentiment is mildly positive to neutral. This page is useful for understanding what day-to-day work may be like, but it contains no fraud-relevant signal about QuickHyre AI Solutions and should not change an assessment either way."
+        },
+        {
+          "category": "company_reviews",
+          "title": "QuickHyre AI Solutions interview questions",
+          "url": "https://reviews-3.example/quickhyre/interviews",
+          "source_domain": "reviews-3.example",
+          "snippet": "A collection of interview reports attributed to QuickHyre AI Solutions covering aptitude rounds, a coding exercise, and a final discussion with a hiring manager. Candidates describe a multi-stage process with technical screening and an HR conversation. Nothing here describes selection without an interview, guaranteed placement, or a request for payment. The reports are consistent with a conventional hiring pipeline. As evidence about QuickHyre AI Solutions this page is neutral: it neither corroborates nor contradicts a complaint."
+        },
+        {
+          "category": "domain_mentions",
+          "title": "Is quickhyre-careers.xyz legitimate?",
+          "url": "https://domaintalk-4.example/quickhyre",
+          "source_domain": "domaintalk-4.example",
+          "snippet": "A domain-information page for quickhyre-careers.xyz showing registration details, name servers, and a creation date. Pages like this mirror public WHOIS data and do not by themselves establish anything about the operator of the site. The page notes that the domain resolves and serves a website. It contains no complaint, no report of fraud, and no discussion of recruitment. It is included here only because it references the domain associated with QuickHyre AI Solutions."
+        },
+        {
+          "category": "job_complaints",
+          "title": "QuickHyre AI Solutions hiring process",
+          "url": "https://jobsforum-5.example/quickhyre-process",
+          "source_domain": "jobsforum-5.example",
+          "snippet": "A forum post describing the hiring process at QuickHyre AI Solutions in neutral terms: an application form, a short assessment, and a scheduling email. The author says they were not selected and shares the timeline. There is no allegation of misconduct, no mention of a fee, and no reference to messaging-app recruitment. The thread is short and the replies are sympathetic rather than accusatory. This page does not describe a negative experience with QuickHyre AI Solutions in the sense that matters for fraud assessment."
+        },
+        {
+          "category": "company_existence",
+          "title": "QuickHyre AI Solutions in the news",
+          "url": "https://news-6.example/quickhyre-mention",
+          "source_domain": "news-6.example",
+          "snippet": "A regional business roundup that mentions QuickHyre AI Solutions once in a list of firms that attended a local technology meetup. The article gives no detail about the company's hiring. It is a passing mention only. Nothing in the article suggests wrongdoing, and nothing corroborates the user's report about QuickHyre AI Solutions. It is included because the name matches the search."
+        },
+        {
+          "category": "company_reviews",
+          "title": "QuickHyre AI Solutions careers page",
+          "url": "https://careers-7.example/quickhyre",
+          "source_domain": "careers-7.example",
+          "snippet": "A careers page listing several open positions attributed to QuickHyre AI Solutions, each with a role description and a generic email address to apply to. The listings look like boilerplate copied between postings. There is no mention of fees, deposits, messaging apps, or guaranteed selection on this page. As a self-published jobs page it says only what the operator wants applicants to see."
+        },
+        {
+          "category": "company_existence",
+          "title": "QuickHyre AI Solutions — business registry entry",
+          "url": "https://registry-8.example/quickhyre",
+          "source_domain": "registry-8.example",
+          "snippet": "A business-registry style entry for QuickHyre AI Solutions showing a registration number, a status field, and a registered address. Entries of this kind are frequently scraped and republished and may be incomplete or out of date. This page provides no assessment of the company's conduct and contains no complaint. It is neutral with respect to QuickHyre AI Solutions."
+        },
+        {
+          "category": "scam_complaints",
+          "title": "QuickHyre AI Solutions is a scam — do not pay",
+          "url": "https://scamforum-10.example/quickhyre-warning",
+          "source_domain": "scamforum-10.example",
+          "snippet": "Warning thread: multiple applicants report that QuickHyre AI Solutions contacted them on WhatsApp claiming they had been selected, then demanded a Rs 1,500 registration fee before onboarding. The posters say no interview ever took place and that the money was never returned. One poster writes that QuickHyre AI Solutions blocked them after payment. Several independent commenters describe the same sequence, and the thread is explicitly titled as a scam warning about QuickHyre AI Solutions."
+        },
+        {
+          "category": "payment_complaints",
+          "title": "QuickHyre AI Solutions asked me for a registration fee",
+          "url": "https://paymentforum-11.example/quickhyre-fee",
+          "source_domain": "paymentforum-11.example",
+          "snippet": "A candidate recounts that QuickHyre AI Solutions asked them to pay a Rs 1,500 registration fee to confirm a seat, promising a refund after the first salary. They say the fee was requested over WhatsApp with no formal offer letter and that the refund never arrived. Other replies describe the same demand for an upfront fee from QuickHyre AI Solutions. This is a first-hand payment complaint naming QuickHyre AI Solutions as the party that collected the money."
+        },
+        {
+          "category": "job_complaints",
+          "title": "QuickHyre AI Solutions selected me without any interview",
+          "url": "https://jobforum-12.example/quickhyre-selection",
+          "source_domain": "jobforum-12.example",
+          "snippet": "A complaint describing how QuickHyre AI Solutions declared the author selected without any interview or technical assessment, then asked for payment to proceed. The author warns other students about QuickHyre AI Solutions and says the whole process was conducted over WhatsApp. Replies agree that this pattern indicates a fraudulent operation using the QuickHyre AI Solutions name. The page names QuickHyre AI Solutions throughout."
+        }
+      ],
+      "expect": {
+        "must_include_urls": [
+          "https://scamforum-10.example/quickhyre-warning",
+          "https://paymentforum-11.example/quickhyre-fee",
+          "https://jobforum-12.example/quickhyre-selection"
+        ],
+        "must_exclude_from_prompt": [],
+        "dedupe_groups": []
+      }
+    },
+    {
+      "id": "duplicate-padding",
+      "description": "The same complaint is captured from several URLs. Deduplication must collapse near-identical pages so the budget reaches distinct evidence.",
+      "company": "Levroxen LLC",
+      "website": "https://www.exametryx.com",
+      "intro_text": "Levroxen LLC - Online Assessment Registration\nAssessment Platform: https://www.exametryx.com",
+      "pages": [
+        {
+          "category": "scam_complaints",
+          "title": "Levroxen LLC reported as a scam",
+          "url": "https://mirror-1.example/levroxen",
+          "source_domain": "mirror-1.example",
+          "snippet": "Levroxen LLC reported as a scam. Applicants say Levroxen LLC collected a registration fee and then stopped responding. The business address listed by Levroxen LLC could not be verified and the phone numbers were disconnected. This identical warning has been republished across several aggregator mirrors."
+        },
+        {
+          "category": "scam_complaints",
+          "title": "Levroxen LLC reported as a scam",
+          "url": "https://mirror-2.example/levroxen",
+          "source_domain": "mirror-2.example",
+          "snippet": "Levroxen LLC reported as a scam. Applicants say Levroxen LLC collected a registration fee and then stopped responding. The business address listed by Levroxen LLC could not be verified and the phone numbers were disconnected. This identical warning has been republished across several aggregator mirrors."
+        },
+        {
+          "category": "scam_complaints",
+          "title": "Levroxen LLC reported as a scam",
+          "url": "https://mirror-3.example/levroxen",
+          "source_domain": "mirror-3.example",
+          "snippet": "Levroxen LLC reported as a scam. Applicants say Levroxen LLC collected a registration fee and then stopped responding. The business address listed by Levroxen LLC could not be verified and the phone numbers were disconnected. This identical warning has been republished across several aggregator mirrors."
+        },
+        {
+          "category": "scam_complaints",
+          "title": "Levroxen LLC reported as a scam",
+          "url": "https://mirror-4.example/levroxen",
+          "source_domain": "mirror-4.example",
+          "snippet": "Levroxen LLC reported as a scam. Applicants say Levroxen LLC collected a registration fee and then stopped responding. The business address listed by Levroxen LLC could not be verified and the phone numbers were disconnected. This identical warning has been republished across several aggregator mirrors."
+        },
+        {
+          "category": "scam_complaints",
+          "title": "Levroxen LLC — independent candidate account",
+          "url": "https://original-5.example/levroxen",
+          "source_domain": "original-5.example",
+          "snippet": "In my own experience Levroxen LLC invited me to an online assessment after I applied, then asked for a fee to release the results. When I refused, Levroxen LLC stopped replying. I later found other students describing the same demand from Levroxen LLC. I am posting this so others recognise the pattern before they pay anything to Levroxen LLC."
+        }
+      ],
+      "expect": {
+        "must_include_urls": [
+          "https://original-5.example/levroxen"
+        ],
+        "dedupe_groups": [
+          [
+            "https://mirror-1.example/levroxen",
+            "https://mirror-2.example/levroxen",
+            "https://mirror-3.example/levroxen",
+            "https://mirror-4.example/levroxen"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "off-topic-first",
+      "description": "Generic scam-advice pages that never name the company are captured first. The on-topic page must outrank them.",
+      "company": "Feuji",
+      "website": "https://www.feuji.com",
+      "intro_text": "Company - Feuji\nRole - AI & Data Analytics Intern\nApply: https://www.feuji.com/careers",
+      "pages": [
+        {
+          "category": "scam_complaints",
+          "title": "Beware of online job scams",
+          "url": "https://advice-1.example/job-scams",
+          "source_domain": "advice-1.example",
+          "snippet": "A general advice article explaining how to spot fraudulent job offers. It describes warning signs such as requests for a registration fee, recruitment over WhatsApp, offers of guaranteed placement, and unrealistic salaries. The article does not name any specific company and is not about any particular employer. It is the kind of page that a search for almost any employer plus the word scam will return."
+        },
+        {
+          "category": "payment_complaints",
+          "title": "Never pay a fee to get a job",
+          "url": "https://advice-2.example/never-pay",
+          "source_domain": "advice-2.example",
+          "snippet": "An awareness notice from a consumer body reminding job seekers that legitimate employers never ask candidates to pay a fee. It lists examples of common fee names such as training, registration, and security deposits. No employer is named anywhere on the page, and the page is not about any specific company."
+        },
+        {
+          "category": "channel_complaints",
+          "title": "WhatsApp job offer scam alert",
+          "url": "https://advice-3.example/whatsapp-alert",
+          "source_domain": "advice-3.example",
+          "snippet": "A guidance page warning that fraudsters approach candidates on WhatsApp and Telegram with fake offers. It explains how to report such messages and where to seek help. The page does not mention any individual company by name."
+        },
+        {
+          "category": "job_complaints",
+          "title": "How to verify an internship offer",
+          "url": "https://advice-4.example/verify",
+          "source_domain": "advice-4.example",
+          "snippet": "An educational article describing steps to verify an internship: check the company's official careers page, look for a physical address, confirm the recruiter's email domain, and never share banking details. It names no employer and contains no report about any specific organisation."
+        },
+        {
+          "category": "scam_complaints",
+          "title": "Feuji — candidates report a fee demand",
+          "url": "https://onpoint-5.example/feuji",
+          "source_domain": "onpoint-5.example",
+          "snippet": "A thread in which two candidates say they were contacted by Feuji and asked for a fee to confirm an internship, with the process run over WhatsApp. They describe receiving an offer without a technical interview. The discussion names Feuji repeatedly and is specifically about Feuji's recruitment."
+        }
+      ],
+      "expect": {
+        "must_include_urls": [
+          "https://onpoint-5.example/feuji"
+        ],
+        "dedupe_groups": []
+      }
+    }
+  ]
+}

@@ -42,6 +42,33 @@ def extract_urls(text: str) -> list[str]:
         cleaned = match.rstrip(".,;:)")
         if cleaned not in seen:
             seen.append(cleaned)
+    # Also accept bare domains like "abc-careers.xyz" without a scheme.
+    for domain in extract_bare_domains(text):
+        if not any(domain in url for url in seen):
+            seen.append(domain)
+    return seen
+
+
+# TLDs we recognise when a domain is written without a scheme.
+KNOWN_TLDS = CHEAP_TLDS | {
+    "com", "org", "net", "edu", "gov", "mil", "int", "io", "co", "in",
+    "us", "uk", "ai", "app", "dev", "tech", "me", "biz", "ac", "cloud",
+    "page", "one", "pro", "cc", "tv", "gg", "sh", "to", "fm",
+}
+BARE_DOMAIN_RE = re.compile(
+    r"(?<![\w@./-])((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+([a-z]{2,24}))(?![\w-])"
+)
+
+
+def extract_bare_domains(text: str) -> list[str]:
+    """Find domain-looking strings without a scheme (case-sensitive, lowercase TLDs)."""
+    seen: list[str] = []
+    for match in BARE_DOMAIN_RE.findall(text or ""):
+        domain = match[0].lower()
+        if match[1] not in KNOWN_TLDS:
+            continue
+        if domain not in seen:
+            seen.append(domain)
     return seen
 
 
@@ -108,6 +135,44 @@ def is_cheap_tld(domain: str | None) -> bool:
 
 def is_free_email(domain: str | None) -> bool:
     return (domain or "") in FREE_EMAIL_DOMAINS
+
+
+# A negation immediately before a money/risk term flips its meaning:
+# "no registration fee", "without any deposit", "never asked for money".
+# Allows a few words in between ("no, under any circumstance, a fee").
+NEGATION_PREFIX_RE = re.compile(
+    r"(?:\bno\b|\bnot\b|\bnever\b|\bwithout\b|\bzero\b|\bnothing\b|\bfree\s+of\b)"
+    r"(?:\W+\w+){0,3}\W+$",
+    re.IGNORECASE,
+)
+
+
+def is_negated(text: str, index: int, window: int = 48) -> bool:
+    """True when the term starting at ``index`` is negated just before it."""
+    prefix = (text or "")[max(0, index - window) : index]
+    return bool(NEGATION_PREFIX_RE.search(prefix))
+
+
+def has_unnegated(text: str, terms: list[str] | set[str] | tuple[str, ...]) -> bool:
+    """True when any term appears at least once *without* a preceding negation.
+
+    This is what stops a post that says "No Registration Fee / No Deposit"
+    from being flagged as demanding an upfront payment.
+    """
+    low = (text or "").lower()
+    for term in terms:
+        term = term.lower()
+        if not term:
+            continue
+        start = 0
+        while True:
+            idx = low.find(term, start)
+            if idx == -1:
+                break
+            if not is_negated(low, idx):
+                return True
+            start = idx + len(term)
+    return False
 
 
 def normalize_name(name: str | None) -> str:

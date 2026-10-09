@@ -1,1 +1,31 @@
-*.md
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# --- Local database / runtime data ---
+backend/data/
+*.db
+*.sqlite3
+
+# --- Node ---
+node_modules/
+frontend/dist/
+.vite/
+dist/
+
+
+# --- Env / secrets ---
+.env
+.env.*
+!.env.example
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log

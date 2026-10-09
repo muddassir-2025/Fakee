@@ -169,6 +169,31 @@ class RiskAssessmentRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class ResponseCache(Base):
+    """Company-level investigation cache.
+
+    Keyed by a hash of the normalized company name + primary domain. Stores the
+    finished risk result so a repeated investigation of the same opportunity is
+    served without another Groq/Search run. Independent of user reports, and
+    only company-level intelligence is stored (never the raw user text).
+    """
+
+    __tablename__ = "response_cache"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    cache_key: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    payload: Mapped[dict] = mapped_column(JSON)
+    score: Mapped[int] = mapped_column(Integer, default=0)
+    level: Mapped[str] = mapped_column(String(16), default="MODERATE")
+    hits: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, index=True
+    )
+
+
 class UserReport(Base):
     __tablename__ = "user_reports"
 

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fakee</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="11" cy="11" r="7.25" stroke="currentColor" stroke-width="1.75" />
+          <path d="M14.6 14.6 20 20" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+          <path d="M7.6 11h6.8" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+        </svg>
+        <h1>Fakee</h1>
+      </div>
+      <button id="theme-toggle" class="icon-button" type="button" aria-label="Toggle theme">◐</button>
+    </header>
+
+    <main>
+      <section class="card">
+        <label class="label" for="input">Job / internship details</label>
+        <textarea
+          id="input"
+          placeholder="Company: ABC Technologies&#10;Internship: Software Development Intern&#10;They contacted me on WhatsApp. Selected without an interview.&#10;Asked for a ₹1,500 registration fee. Website: abc-careers.xyz"
+        ></textarea>
+
+        <details class="settings">
+          <summary>Settings</summary>
+          <label class="label" for="api-base">Backend API base</label>
+          <input id="api-base" type="text" spellcheck="false" />
+          <label class="label" for="provider">Search provider</label>
+          <select id="provider">
+            <option value="duckduckgo">DuckDuckGo (free, no key)</option>
+            <option value="brave">Brave Search API (free tier)</option>
+          </select>
+          <label class="label" for="brave-key">Brave API key (optional)</label>
+          <input id="brave-key" type="password" spellcheck="false" placeholder="only if using Brave" />
+          <label class="checkbox-row" for="include-analyst">
+            <input id="include-analyst" type="checkbox" checked />
+            Include AI analyst (a few more tokens; off = frugal)
+          </label>
+        </details>
+
+        <button id="run" class="primary" type="button">Investigate</button>
+        <p class="hint">Ctrl / ⌘ + Enter to investigate</p>
+      </section>
+
+      <section id="empty" class="empty">
+        <h2>Check a posting before you trust it</h2>
+        <p>
+          Searches and page reads run in your own browser, which keeps the tool free and private.
+          Paste whatever you have — missing details are fine.
+        </p>
+        <ol>
+          <li>Paste the message, offer or job description.</li>
+          <li>Press Investigate and watch the pages it reads.</li>
+          <li>Read the verdict, the signals and the sources.</li>
+        </ol>
+      </section>
+
+      <section id="quota" class="card quota" hidden>
+        <div class="quota-row">
+          <span class="quota-label">Groq budget</span>
+          <span id="quota-value" class="quota-value">—</span>
+        </div>
+        <div class="quota-bar"><div id="quota-fill" class="quota-fill"></div></div>
+        <p id="quota-note" class="quota-note muted"></p>
+      </section>
+
+      <section id="progress" class="progress" hidden aria-live="polite">
+        <div class="spinner"></div>
+        <p class="progress-phase">Starting…</p>
+        <p class="progress-note muted"></p>
+      </section>
+
+      <section id="error" class="error" role="alert" hidden></section>
+
+      <section id="result" class="result" hidden aria-live="polite"></section>
+    </main>
+
+    <footer class="footer">
+      Never pay for a job, internship or “training”. Report fraud on cybercrime.gov.in or 1930.
+    </footer>
+
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

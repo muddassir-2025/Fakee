@@ -27,52 +27,21 @@ def build_queries(user_input: UserInput) -> list[SearchQueryGroup]:
         if cleaned:
             groups.append(SearchQueryGroup(category=category, queries=cleaned))
 
-    add(
-        "company_existence",
-        [
-            f'"{name}" official website' if name else "",
-            f'"{name}" about company' if name else "",
-            f"site:linkedin.com {name}" if name else "",
-        ],
-    )
-    add(
-        "company_reviews",
-        [
-            f'"{name}" reviews' if name else "",
-            f'"{name}" employee reviews' if name else "",
-            f'"{name}" glassdoor' if name else "",
-        ],
-    )
+    # A deliberately small, high-signal set: two or three queries per theme.
+    # The scam/negative themes come first, so the round-robin budget below
+    # always covers them before spending queries on general company info.
     add(
         "scam_complaints",
         [
             f'"{name}" scam' if name else "",
             f'"{name}" fraud' if name else "",
             f'"{subject}" fake internship' if subject else "",
-            f'"{subject}" complaints' if subject else "",
-        ],
-    )
-    add(
-        "job_complaints",
-        [
-            f'"{name}" "{title}" complaint' if name and title else "",
-            f'"{name}" hiring scam students' if name else "",
-            f'"{name}" fake job offer' if name else "",
-        ],
-    )
-    add(
-        "domain_mentions",
-        [
-            f'"{domain}" scam' if domain else "",
-            f'"{domain}" reviews' if domain else "",
-            f"{website} legit" if website else "",
         ],
     )
     add(
         "payment_complaints",
         [
             f'"{name}" registration fee' if name else "",
-            f'"{name}" "pay" internship fee' if name else "",
             f'"{subject}" refund' if subject else "",
         ],
     )
@@ -81,18 +50,44 @@ def build_queries(user_input: UserInput) -> list[SearchQueryGroup]:
         [
             f'"{name}" WhatsApp recruitment' if name else "",
             f'"{name}" telegram job offer' if name else "",
-            f'"{subject}" WhatsApp scam' if subject else "",
+        ],
+    )
+    add(
+        "job_complaints",
+        [
+            f'"{name}" fake job offer' if name else "",
+            f'"{name}" "{title}" complaint' if name and title else "",
+            f'"{name}" hiring scam students' if name else "",
+        ],
+    )
+    add(
+        "domain_mentions",
+        [
+            f'"{domain}" scam' if domain else "",
+            f"{website} legit" if website else "",
+        ],
+    )
+    add(
+        "company_reviews",
+        [
+            f'"{name}" reviews' if name else "",
+            f'"{name}" glassdoor' if name else "",
+        ],
+    )
+    add(
+        "company_existence",
+        [
+            f'"{name}" official website' if name else "",
+            f"site:linkedin.com {name}" if name else "",
         ],
     )
 
-    # Claim-specific queries.
+    # Claim-specific queries, kept to the strongest few to stay within budget.
     claim_queries: list[str] = []
-    for claim in user_input.claims[:5]:
+    for claim in user_input.claims[:2]:
         claim_queries.append(f'"{subject}" "{claim[:60]}"' if subject else claim[:80])
     if user_input.money_request.detected and name:
         claim_queries.append(f'"{name}" "{user_input.money_request.reason or "fee"}"')
-    if user_input.opportunity.salary and name:
-        claim_queries.append(f'"{name}" salary "{user_input.opportunity.salary}"')
     add("specific_claims", claim_queries)
 
     return _limit_groups(groups, settings.max_search_queries)
