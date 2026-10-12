@@ -110,6 +110,32 @@ async def test_investigate_with_evidence_uses_provided_pages(client: httpx.Async
 
 
 @pytest.mark.asyncio
+async def test_empty_client_capture_is_not_answered_with_mock(client: httpx.AsyncClient) -> None:
+    """A capture that came back empty must not be dressed up as a real search.
+
+    The extension runs the search/scrape itself and posts the pages back. When it
+    captured nothing, the backend used to fall through to a server-side search
+    that (with Exa off) returned ``mock.freebuff.dev`` results, so a failed crawl
+    looked like a genuine investigation. The client path must stay evidence-free
+    and say so on the stage instead of inventing sources.
+    """
+    response = await client.post(
+        "/api/investigate/with-evidence",
+        json={"text": SCAM_TEXT, "persist": False, "pages": []},
+    )
+    assert response.status_code == 200
+    body = response.json()
+
+    search_stage = next(s for s in body["stages"] if s["stage"] == "web_search")
+    assert search_stage["status"] == "skipped"
+    assert "no readable pages" in search_stage["detail"]
+
+    assert body["risk"]["source_urls"] == []
+    for item in body["investigation"]["evidence"]:
+        assert "mock.freebuff.dev" not in (item.get("source_url") or "")
+
+
+@pytest.mark.asyncio
 async def test_structured_input_skips_re_extraction(client: httpx.AsyncClient) -> None:
     plan = (await client.post("/api/queries", json={"text": SCAM_TEXT})).json()
     response = await client.post(

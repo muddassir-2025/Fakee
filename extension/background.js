@@ -74,6 +74,28 @@ async function startCrawl(text, settings) {
   });
 }
 
+/**
+ * Fill in a run's settings, preferring whatever the caller sent.
+ *
+ * The side panel always sends a complete set (it reads them from the form), but
+ * a web page driving a run over the bridge cannot know the user's choices — it
+ * only ever sends an optional `apiBase`. Without this, a site-driven run fell
+ * back to the crawler's hard-coded defaults (DuckDuckGo, no Brave key) and
+ * silently ignored a provider the user had configured in the panel.
+ */
+async function resolveSettings(incoming) {
+  const override = incoming || {};
+  if (override.searchProvider) return override;
+  const saved = await chrome.storage.local.get([
+    "apiBase",
+    "siteUrl",
+    "searchProvider",
+    "braveKey",
+    "includeAnalyst",
+  ]);
+  return { ...saved, ...override };
+}
+
 /** Send a progress/result/error payload to the side panel and any web pages. */
 function broadcastPanel(payload) {
   const message = { target: "panel", ...payload };
@@ -125,9 +147,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.target !== "background") return false;
 
   if (message.type === "RUN") {
-    handleRun(message.text, message.settings, (msg) =>
-      broadcastPanel({ type: "ERROR", message: msg }),
-    ).then(sendResponse);
+    resolveSettings(message.settings)
+      .then((settings) =>
+        handleRun(message.text, settings, (msg) =>
+          broadcastPanel({ type: "ERROR", message: msg }),
+        ),
+      )
+      .then(sendResponse)
+      .catch((err) => sendResponse({ ok: false, error: String(err?.message || err) }));
     return true; // keep the message channel open for the async response
   }
 
@@ -200,9 +227,15 @@ chrome.runtime.onConnectExternal.addListener((port) => {
     }
 
     if (message?.type === "RUN") {
-      handleRun(message.text, message.settings, (msg) =>
-        port.postMessage({ type: "ERROR", message: msg }),
-      );
+      resolveSettings(message.settings)
+        .then((settings) =>
+          handleRun(message.text, settings, (msg) =>
+            port.postMessage({ type: "ERROR", message: msg }),
+          ),
+        )
+        .catch((err) =>
+          port.postMessage({ type: "ERROR", message: String(err?.message || err) }),
+        );
     }
   });
 });

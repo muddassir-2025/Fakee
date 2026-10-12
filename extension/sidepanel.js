@@ -179,7 +179,10 @@ function finishRun() {
 }
 
 // ------------------------------------------------------------------ quota ---
-// Each investigation costs two Groq requests (query plan + evidence).
+// Upper bound: a run can spend two Groq requests (query plan + evidence). It is
+// often fewer — the extraction call is skipped when the text is already clear —
+// which is one of the reasons this is stated as a cost rather than used to
+// project how many runs are left.
 const REQUESTS_PER_INVESTIGATION = 2;
 
 async function refreshQuota() {
@@ -210,16 +213,22 @@ function renderQuota(quota) {
   }
 
   const pct = Math.max(0, Math.min(100, (remaining / limit) * 100));
-  els.quotaValue.textContent = `${remaining} / ${limit} requests left`;
+  els.quotaValue.textContent = `${remaining} / ${limit} requests left today`;
   els.quotaFill.style.width = `${pct.toFixed(1)}%`;
   els.quotaFill.className = `quota-fill ${pct > 50 ? "" : pct > 20 ? "warn" : "danger"}`.trim();
 
-  const runs = Math.floor(remaining / REQUESTS_PER_INVESTIGATION);
-  let note = `≈ ${runs} more investigation${runs === 1 ? "" : "s"} today`;
+  // Report only what Groq actually sends, each figure with the window it
+  // belongs to: requests are a rolling daily budget, tokens a per-minute one
+  // that refills every minute. An invented "N investigations left" figure would
+  // have to guess, and it guessed badly — it divided the request budget by two
+  // and ignored the daily *token* ceiling, which binds far sooner (~200k TPD
+  // against ~2 Groq calls of 2-4k tokens per run).
+  const note = [];
   if (quota.remaining_tokens != null && quota.limit_tokens != null) {
-    note += ` · ${quota.remaining_tokens} / ${quota.limit_tokens} tokens this minute`;
+    note.push(`${quota.remaining_tokens} / ${quota.limit_tokens} tokens left this minute`);
   }
-  els.quotaNote.textContent = note;
+  note.push(`each run costs up to ${REQUESTS_PER_INVESTIGATION} requests`);
+  els.quotaNote.textContent = note.join(" · ");
 }
 
 // ---------------------------------------------------------------- render ----

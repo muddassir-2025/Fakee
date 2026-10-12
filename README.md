@@ -215,6 +215,7 @@ nothing else depends on it.
 | `GET`  | `/api/health`               | Status + which integrations are live |
 | `GET`  | `/api/health/live`          | Liveness probe (process only)        |
 | `GET`  | `/api/health/ready`         | Readiness probe (+ real DB check)    |
+| `GET`/`HEAD` | `/health`, `/health/live`, `/health/ready` | The same three probes, unprefixed, for uptime monitors and platform health checks |
 | `POST` | `/api/investigate`          | Run a full investigation (server-side search) |
 | `POST` | `/api/queries`              | Stage-1 query plan for the extension |
 | `POST` | `/api/investigate/with-evidence` | Investigate pages captured by the client |
@@ -359,7 +360,12 @@ Everything below is on by default and needs no extra setup.
   failures are traceable end to end.
 - **Health.** `/api/health/ready` performs a real database round-trip and returns
   `503` when the database is unreachable — wire it to your load balancer / k8s
-  readiness probe. `/api/health/live` is a dependency-free liveness check.
+  readiness probe. `/api/health/live` is a dependency-free liveness check. All
+  three are also served **unprefixed** (`/health`, `/health/live`, `/health/ready`)
+  and answer `HEAD` as well as `GET`, because uptime monitors probe a bare path
+  and send `HEAD` by default. Point UptimeRobot / Render's health check at
+  `https://<your-backend>/health/live`: it is the cheapest check and does not
+  depend on the database, so a database blip does not read as an outage.
 - **Rate limiting.** `/api/investigate` and `/api/reports` are rate-limited per
   client IP (`RATE_LIMIT_*`); the in-memory store is bounded. Set
   `TRUST_PROXY=true` only when running behind a trusted proxy (the Docker setup
@@ -466,7 +472,16 @@ redeploy — changing one without a rebuild does nothing:
 The site still builds and serves fine without them; it just cannot sign anyone in
 or file a report. See [`frontend/.env.example`](frontend/.env.example).
 
-### Google sign-in in production
+**Analytics.** `<Analytics />` from `@vercel/analytics` is mounted in `main.tsx`.
+It loads `/_vercel/insights/script.js`, which only Vercel serves, so page views
+are counted **only once Web Analytics is enabled for the project in the Vercel
+dashboard**. Until then — and on any other host — that request 404s (the docs
+promise no page views, and the browser logs a warning) while the site works
+normally. It is cookieless and aggregate-only; see
+`frontend/public/privacy.html`, section 7. The site's URLs carry no personal data,
+so there is nothing to redact via `beforeSend`.
+
+### Google sign-in (production, and the same fix for localhost)
 
 Neon Auth ships shared Google credentials for development, which is fine for
 testing but shows *Neon's* name on the consent screen. For production, create your
@@ -476,16 +491,49 @@ own Google OAuth client and register Neon's callback with it:
    Configure Google and paste your Client ID and secret.
 2. **Google Cloud Console → Credentials → your Web-application OAuth client.**
    Under *Authorized redirect URIs* add exactly
-   `{NEON_AUTH_BASE_URL}/callback/google` (no trailing slash before `/callback`),
-   and under *Authorized JavaScript origins* add your site's origins
+   `{NEON_AUTH_BASE_URL}/callback/google` (no trailing slash before `/callback`).
+   Then under *Authorized JavaScript origins* add your site's origins
    (`http://localhost:5173` and `https://<your-app>.vercel.app`).
+
+   These two fields are unrelated, and mixing them up is the usual cause of a
+   `redirect_uri_mismatch` that "won't go away":
+
+   - The *redirect URI* is **Neon's** callback, never your own site. Google
+     returns the browser to Neon, which forwards it on to your app — so
+     `http://localhost:5173` or `https://<your-app>.vercel.app` must **not** be
+     added there.
+   - Adding your site to *Authorized JavaScript origins* does **not** satisfy
+     the check, however correct that value is.
+   - The error names the client (`client_id`) and the exact URI it expected. Edit
+     the client with that id — if you cannot find it, it is in a different Google
+     Cloud project. The digits before the first `-` in a Client ID are the Google
+     Cloud **project number**, so the id in the error tells you which project to
+     open.
+   - The Client ID **and secret** stored in Neon must be the same pair as the
+     client you registered the URI on. Registering the URI on one client while
+     Neon holds another client's credentials is the other common cause of a
+     mismatch that "will not go away": the error keeps naming the old client id,
+     and the console page you are editing looks perfectly correct.
+   - `CORS_ORIGINS` on the backend is a third, unrelated thing: it governs browser
+     requests to your API and has no bearing on OAuth redirects.
 3. **Neon Console → Settings → Auth → trusted domains.** Add every origin you
    pass as `callbackURL` — your Vercel origin, plus `http://localhost:5173` while
    developing. Without this, Managed Better Auth will not redirect a finished
    sign-in back to your site.
 
+**This applies to local testing too.** Google always redirects to *Neon's*
+callback, never to your site, so a missing registration breaks `localhost:5173`
+and the deployed site in exactly the same way. One fix covers both.
+
 If the browser lands on a Google page saying `redirect_uri_mismatch`, step 2 is
-missing or has a typo: the error URL names the exact redirect URI it expected.
+missing or has a typo — the error URL names the exact URI it expected, so copy it
+from there rather than retyping. Google can take a few minutes to pick up a new
+redirect URI.
+
+While the consent screen is in **Testing** status, only accounts added under
+*Test users* can sign in, and that failure looks different (an `access_denied`
+"has not completed the Google verification process" page). Add the Google account
+you test with, or publish the app, before concluding step 2 did not work.
 
 ### Extension package
 

@@ -114,6 +114,25 @@ async function runCrawl(text, cfg) {
     });
   });
 
+  // A crawl that read nothing must not be sent on as if it were evidence: the
+  // backend refuses to fabricate mock results for a client capture, so stopping
+  // here turns a silent "verdict built on nothing" into something the user can
+  // act on. Name the half that failed — discovery (search) or reading (scrape).
+  if (pages.length === 0) {
+    const provider = cfg.searchProvider === "brave" ? "Brave" : "DuckDuckGo";
+    const reason =
+      found.size === 0
+        ? `the ${provider} search returned no results`
+        : `none of the ${targets.length} result pages could be read`;
+    report({
+      type: "ERROR",
+      message:
+        `Nothing could be captured for analysis — ${reason}. ` +
+        "Check the search provider in Settings and try again.",
+    });
+    return;
+  }
+
   // --- 4. Reason server-side -------------------------------------------
   report({ type: "PROGRESS", phase: "Analyzing evidence", done: 0, total: 1 });
   const result = await postJson(`${cfg.apiBase}/investigate/with-evidence`, {

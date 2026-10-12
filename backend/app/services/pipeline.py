@@ -146,12 +146,19 @@ async def run_investigation(
 
     # 3. Web search / scrape ---------------------------------------------
     t = time.perf_counter()
-    if provided_results:
+    # ``provided_results is not None`` separates "the client ran the capture and
+    # handed us its pages" from "no client capture at all" (the server-side
+    # path). An *empty* list is a failed capture, not an invitation to search
+    # server-side: substituting mock/demo results there would dress a failed
+    # crawl up as a real investigation and hide the failure from the user.
+    if provided_results is not None:
         bundle = SearchBundle(results=list(provided_results), used_mock=False, queries_run=0)
         timer.mark(
             "web_search",
-            "ok",
-            f"{len(bundle.results)} pages captured by the client",
+            "ok" if bundle.results else "skipped",
+            f"{len(bundle.results)} pages captured by the client"
+            if bundle.results
+            else "client captured no readable pages",
             t,
         )
     elif query_groups:
@@ -270,9 +277,10 @@ async def run_investigation(
     )
 
     # 11. Cache write ----------------------------------------------------
-    # Only cache live results: a mock/demo result must never be served to a
-    # later request, and caching it would make the demo sticky.
-    if cache_enabled and cache_key and not bundle.used_mock:
+    # Only cache results actually grounded in captured evidence. A mock/demo
+    # result and a capture that came back empty must never be served to a later
+    # request: caching either would make the failure sticky for a whole TTL.
+    if cache_enabled and cache_key and not bundle.used_mock and bundle.results:
         t_cache = time.perf_counter()
         try:
             await store_cached(session, cache_key, user_input=user_input, response=response)
