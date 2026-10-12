@@ -162,6 +162,147 @@ def test_merge_reviews_is_additive_and_keeps_the_invariant() -> None:
 
 
 # --------------------------------------------------------------------------
+# C1 — a page that never names the company is background, not support
+# --------------------------------------------------------------------------
+def test_evidence_reports_whether_the_page_names_the_company() -> None:
+    """Rule-derived evidence carries whether the page is about the company.
+
+    A page that never names the employer cannot be support for a verdict about
+    them, so the item says so and the report labels it. This is reachable when a
+    provider states the sentiment itself: the page is kept as negative evidence,
+    but it is background all the same.
+    """
+    stated_negative = SearchResult(
+        query="Acme scam",
+        category="scam_complaints",
+        title="Beware of online job scams",
+        url="https://advice.example/jobs",
+        snippet="Scammers ask candidates for a registration fee over WhatsApp.",
+        source_domain="advice.example",
+        sentiment="negative",
+    )
+    _reviews, evidence, _findings = ev.heuristic_structure(
+        [stated_negative, _page(0)], _user_input()
+    )
+
+    by_url = {item.source_url: item for item in evidence}
+    assert by_url["https://advice.example/jobs"].topical is False
+    assert by_url["https://forum0.example/acme-0"].topical is True
+
+
+def test_a_page_that_never_names_the_company_is_not_evidence_at_all() -> None:
+    """Keywords alone cannot make a generic page evidence about the employer.
+
+    Captured pages carry no sentiment, so a generic scam-awareness page is not
+    negative and never enters the list — the rule that keeps it out is what the
+    label exists as a backstop for.
+    """
+    generic = SearchResult(
+        query="Acme scam",
+        category="scam_complaints",
+        title="Beware of online job scams",
+        url="https://advice.example/jobs",
+        snippet="Scammers ask candidates for a registration fee over WhatsApp.",
+        source_domain="advice.example",
+    )
+    _reviews, evidence, _findings = ev.heuristic_structure([generic, _page(0)], _user_input())
+
+    urls = {item.source_url for item in evidence}
+    assert "https://advice.example/jobs" not in urls
+    assert "https://forum0.example/acme-0" in urls
+
+
+# --------------------------------------------------------------------------
+# C2 — the analyst's citations must be pages this run actually read
+# --------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_analyst_sources_are_limited_to_pages_this_run_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A cited URL that was never fetched must not reach the report.
+
+    The model reliably lists addresses it was never given — a stale slug, a
+    guessed URL — and the panel renders each one as a confident link, so an
+    address that was never read appears as the source of the verdict. Only
+    citations that resolve to a captured page survive, and they survive as the
+    captured address rather than the model's spelling of it.
+    """
+
+    async def fake_chat_json(system: str, user: str, **kwargs) -> dict:
+        return {
+            "reviews": {"total_mentions": 1, "negative_mentions": 0},
+            "evidence": [],
+            "notable_findings": [],
+            "analyst": {
+                "fraud_score": 10,
+                "verdict": "needs_verification",
+                "sources_used": [
+                    "https://www.forum0.example/acme-0/#comments",  # captured, respelled
+                    "https://invented.example/never-fetched",  # never fetched
+                    "https://forum0.example/acme-0",  # captured, exact
+                ],
+            },
+        }
+
+    monkeypatch.setattr(ev.groq_client, "enabled", True)
+    monkeypatch.setattr(ev.groq_client, "chat_json", fake_chat_json)
+
+    results = [_page(0)]
+    _r, _e, _f, analyst, _coverage = await ev.structure_evidence(results, _user_input())
+
+    assert analyst is not None
+    assert analyst.sources_used == ["https://forum0.example/acme-0"]
+
+
+@pytest.mark.asyncio
+async def test_evidence_items_cite_only_pages_this_run_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The evidence list must not link to a page that was never fetched.
+
+    Evidence is shown with its URL as a link, so an invented address is displayed
+    as the basis of the finding it is attached to. A citation that resolves to a
+    captured page is kept under the captured address (which is also the key the
+    extension labels the page's search provider with); one that does not is
+    dropped, and the rule engine still contributes its own items for the pages
+    the model never saw.
+    """
+
+    async def fake_chat_json(system: str, user: str, **kwargs) -> dict:
+        return {
+            "reviews": {"total_mentions": 3, "negative_mentions": 1},
+            "evidence": [
+                {
+                    "type": "complaint",
+                    "source_url": "https://forum0.example/acme-0/",
+                    "source_domain": "forum0.example",
+                    "title": "Acme complaint",
+                    "summary": "Acme demanded a registration fee.",
+                    "relevance": 0.9,
+                },
+                {
+                    "type": "complaint",
+                    "source_url": "https://invented.example/never-fetched",
+                    "source_domain": "invented.example",
+                    "title": "Acme scam",
+                    "summary": "Invented page.",
+                    "relevance": 0.9,
+                },
+            ],
+            "notable_findings": [],
+        }
+
+    monkeypatch.setattr(ev.groq_client, "enabled", True)
+    monkeypatch.setattr(ev.groq_client, "chat_json", fake_chat_json)
+
+    _r, evidence, _f, _a, _c = await ev.structure_evidence([_page(0)], _user_input())
+
+    urls = [item.source_url for item in evidence]
+    assert "https://forum0.example/acme-0" in urls
+    assert "https://invented.example/never-fetched" not in urls
+
+
+# --------------------------------------------------------------------------
 # D — coverage reporting
 # --------------------------------------------------------------------------
 @pytest.mark.asyncio

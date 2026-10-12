@@ -11,9 +11,12 @@ process:
 Both end up in one table so the panel can show a single bar over whatever the
 run actually costs. The two properties that matter:
 
-**Global, not per user.** The allowances belong to the deployment's one free
-account, so each provider window has exactly one reading that every visitor
+**Global, not per user.** An allowance belongs to an API account, not to a
+visitor, so each provider window has exactly one reading that every visitor
 shares. Nothing in this module is keyed by user, and nothing here is user data.
+The Brave report is numbers-only, so it identifies the key it came from no more
+than it identifies the client that sent it: exact while runs share one Brave
+account, indicative when each client brings its own.
 
 **In the database, not in process memory.** The free-tier host spins the
 instance down; an in-memory snapshot came back empty on every restart, which is

@@ -939,6 +939,22 @@ button.primary:disabled {
   color: var(--faint);
 }
 
+/* A page that was read but says nothing about the employer: it stays in the
+   list (it is what the run looked at) and is marked so it cannot pass as
+   support for the verdict. */
+.evidence-note {
+  display: inline-block;
+  margin-left: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+}
+
 /* ----------------------------------------------------------------- footer -- */
 
 .footer {

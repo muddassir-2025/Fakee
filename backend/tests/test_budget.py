@@ -309,7 +309,7 @@ async def test_budget_endpoint_omits_brave_when_it_is_not_in_play(
 
 @pytest.mark.asyncio
 async def test_brave_report_is_shared_by_every_caller(client: httpx.AsyncClient) -> None:
-    """One free account, so the reading is global — never per client or user.
+    """The reading is deployment-wide, keyed by provider window — never per client.
 
     Two separate requests (each with its own database session, and neither
     signed in) must see the same numbers, and nothing user-scoped may be stored.

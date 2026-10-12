@@ -52,6 +52,12 @@ starts running investigations inline through the extension.
 - The panel follows the system light/dark preference (toggle in the top right).
 - If the backend cannot be reached, the error names the API base it tried and
   points at Settings, rather than showing a bare “Failed to fetch”.
+- Every source link under **AI analyst** and **Pages read** is a page the run
+  actually read: the backend matches each cited URL back to the captured pages and
+  drops the rest, because the model also produces addresses it was never given.
+- **Pages read** is what the section is, not what it proves. It lists everything
+  the crawl captured, and any entry whose page never names the employer is marked
+  *does not mention the employer* — background, not support for the verdict.
 - Icons are generated from one source of truth:
   `node tools/make-icons.mjs` rewrites `icons/icon{16,32,48,128}.png` with no
   image dependencies.
@@ -65,10 +71,13 @@ One bar covers the free allowances a run can spend, read from `GET /api/budget`:
 | Groq requests | daily | the backend's own Groq response headers |
 | Brave searches | monthly | the rate-limit headers of this browser's Brave calls |
 
-- **Stored server-side, shared by everyone.** The allowances belong to the
-deployment's one free account, so the bar neither resets when you close and
-reopen the panel nor differs between users. It is one row per provider window in
-the `provider_budgets` table (apply it with `alembic upgrade head`).
+- **Stored server-side, deployment-wide.** One row per provider window in the
+`provider_budgets` table — keyed by provider and window, with no user, session or
+client column (apply it with `alembic upgrade head`) — so the bar neither resets
+when you close and reopen the panel nor differs between users. The Groq reading
+is the backend's own; the Brave reading is the last one any run reported, so it
+is exact while runs share one Brave account and indicative when each client
+brings its own key.
 - **Each budget is its own track**, filled by its own remaining share, rather
 than one blended percentage: a daily request quota and a monthly search
 allowance are not comparable, and averaging them hides whichever is about to run
@@ -196,10 +205,15 @@ report queue and can accept, reject, or requeue a report.
 ## Privacy
 
 Captured page text is sent to **your** backend for analysis. Nothing is sent to
-Exa or any search API. Settings and the last input live in local extension
-storage only. If you sign in so you can report a posting, the extension also
-stores the session the website hands it (account id, email, display name, token)
-until you sign out.
+Exa; the queries the extension builds go from your browser to the engine you
+selected, and the posting text is not sent with them. A run that searched with
+Brave also reports the allowance it just spent — the limit, remaining and reset
+numbers out of Brave's own reply — so the shared budget bar is accurate. Those
+three numbers are the only thing the extension sends on its own, and they
+identify neither you nor what you searched for. Settings and the last input live
+in local extension storage only. If you sign in so you can report a posting, the
+extension also stores the session the website hands it (account id, email,
+display name, token) until you sign out.
 
 The full policy — what is read, what is sent to the backend, what is stored, and
 what is never done — lives at `frontend/public/privacy.html` and is served on the
@@ -227,5 +241,10 @@ deployed site at `/privacy`. Submit that URL in the Chrome Web Store listing.
   reads the result pages a search returns) and allow for a slower review. Keep an
   unpacked/developer-mode install as a fallback.
 - **Your browser must be open** for a run — there is no server-side crawler.
+- **The Brave track is the last report, not your key's own figure.** The report
+  carries numbers only, with no key identity, so if every client configures a
+  different Brave key the shared track shows whichever reading landed last. Exact
+  when one Brave account is used across the deployment (for example a key the
+  operator tells clients to set); indicative otherwise.
 - Sites that render entirely via JavaScript may return little text from a plain
   `fetch` (this crawler does not execute page scripts).

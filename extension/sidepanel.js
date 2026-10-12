@@ -234,8 +234,8 @@ function providersInPlay() {
  * Load the shared budget: the free allowances a run spends, as one bar.
  *
  * It comes from the backend and is not keyed by user, so it is the same numbers
- * for everyone and survives closing the panel — the allowances belong to the
- * deployment's one free account, not to whoever is looking.
+ * for everyone and survives closing the panel: one row per provider window, with
+ * no user, session or client column.
  */
 async function refreshBudget() {
   try {
@@ -558,9 +558,10 @@ function renderFindings(findings) {
 
 function renderEvidence(evidence, pagesCaptured, providers = {}) {
   const section = el("section", "card");
-  const title = pagesCaptured
-    ? `Supporting evidence (${pagesCaptured} pages read)`
-    : "Supporting evidence";
+  // Not "supporting evidence": this is everything the run read, and some of it
+  // is background — pages that never mention the employer. Each of those is
+  // labelled below, so the list cannot read as support for the verdict.
+  const title = pagesCaptured ? `Pages read (${pagesCaptured})` : "Pages read";
   section.append(el("h2", "section-title", title));
 
   const list = el("ul", "evidence");
@@ -569,9 +570,14 @@ function renderEvidence(evidence, pagesCaptured, providers = {}) {
     // Say which search backend supplied this source, so a mixed run (SearXNG
     // primary with a fallback) is visible rather than implied.
     const provider = item.source_url ? providers[item.source_url] : "";
-    if (item.source_domain || provider) {
+    if (item.source_domain || provider || item.topical === false) {
       const row = el("div", "domain", item.source_domain || "");
       if (provider) row.append(el("span", "provider-tag", `via ${provider}`));
+      // A page that never names the employer cannot be evidence about it, so
+      // say so on the page itself rather than letting it pass as support.
+      if (item.topical === false) {
+        row.append(el("span", "evidence-note", "does not mention the employer"));
+      }
       li.append(row);
     }
     if (item.title) li.append(el("strong", "", item.title));

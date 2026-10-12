@@ -63,7 +63,12 @@ class BudgetSegment(BaseModel):
 
 
 class BudgetStatus(BaseModel):
-    """Groq + Brave budget, shared by every visitor (it is one free account)."""
+    """Groq + Brave budget, deployment-wide: one reading per provider window.
+
+    Shared by every visitor — keyed by provider and window, with no user, session
+    or client column. Groq's reading is the backend's own; the Brave reading is
+    the last one a client reported.
+    """
 
     enabled: bool
     segments: list[BudgetSegment] = Field(default_factory=list)
@@ -199,6 +204,12 @@ class Evidence(BaseModel):
     title: str | None = None
     summary: str = ""
     relevance: float = 0.5
+    # Whether the page is actually about the company under review. A captured
+    # page that never names it cannot support a verdict about it (see
+    # ``evidence._is_on_topic``), and the report lists every page that was read —
+    # so without this flag a generic scam-advice page reads as support for the
+    # employer it never mentions. The clients label these as background.
+    topical: bool = True
 
 
 class SearchQueryGroup(BaseModel):
@@ -286,6 +297,10 @@ class AnalystReport(BaseModel):
     red_flags: list[AnalystFlag] = Field(default_factory=list)
     green_flags: list[AnalystFlag] = Field(default_factory=list)
     what_to_do: list[str] = Field(default_factory=list)
+    # The pages this run actually read that the analyst says it relied on. The
+    # model's answer is filtered against the captured pages before it gets here
+    # (``evidence.valid_sources``), so every entry is an address that was really
+    # fetched rather than one the model produced from memory.
     sources_used: list[str] = Field(default_factory=list)
 
 

@@ -168,15 +168,20 @@ Side panel → POST /api/queries → search + scrape in the browser
 The backend enables this with two endpoints (above) and allows the extension
 origin via `CORS_ORIGIN_REGEX` (default `chrome-extension://.*`).
 
-The panel's budget bar is one bar over the two free allowances a run can spend.
-It is **stored server-side in `provider_budgets` and shared by everyone** — the
-Groq and Brave quotas belong to the deployment's single free account, so the bar
-neither resets when a client reconnects nor differs between users. Groq's
-rate-limit headers are captured on every backend call; Brave is called from the
-browser, so the extension reports what it read (`POST /api/budget/brave`) and the
-backend keeps it. Each budget is its own track on the bar, sized by its own
-remaining share, so a daily request quota and a monthly search quota are never
-averaged into a number that hides one running out.
+The panel's budget bar is one bar over the two free allowances a run can spend,
+read from `GET /api/budget`. It is **stored server-side in `provider_budgets`**
+and is **deployment-wide, not per user**: one row per provider window, keyed by
+provider and window with no user, session or client column, so the bar neither
+resets when a client reconnects nor differs between users. Groq's rate-limit
+headers are captured on every backend call (the deployment's key); Brave is
+called from the browser with whichever key that client configured, so the
+extension reports the numbers it read (`POST /api/budget/brave`) and the backend
+keeps the latest reading for that window. Each budget is its own track on the
+bar, sized by its own remaining share, so a daily request quota and a monthly
+search quota are never averaged into a number that hides one running out. The
+report is deliberately unauthenticated — the extension runs anonymously — and
+rate-limited: it carries three numbers and no identity, so the worst a forged
+report achieves is a wrong bar until the next real search overwrites it.
 
 The website can drive the same crawl: it connects to the extension over a Port
 (see [The website ⇄ extension bridge](#the-website--extension-bridge)) so a
@@ -630,8 +635,29 @@ Redis (see `backend/app/api/ratelimit.py`).
   records it (`official_link_verified`) — that is what a legitimate campus programme
   using a Google Form looks like. If an official source instead states *different*
   terms, that contradiction is scored.
-- **Two documents, not one.** JSON 1 is what the user reported; JSON 2 is what the
-  investigation discovered. Keeping them separate keeps the output auditable.
+- **Every source shown is a page that was read.** Both URL lists in the report are
+  model output, and a model will cite an address it was never given — a stale slug, a
+  guessed URL — which then renders as a confident link. Each citation is matched back
+  to the pages this run captured (`evidence.valid_sources`, `evidence._only_read`),
+  shown under the captured address, and dropped when nothing matches. Pages that never
+  name the company are not put in the prompt as evidence while a page that names it is
+  available: `"<employer>" <claim>` returns backlog explainers and Telegram job
+  boards, which used to fill the prompt budget and come back as the verdict's sources.
+- **Background is labelled, not implied.** The report lists every page the crawl read —
+  `Pages read (n)` — and marks an entry whose page never names the employer
+  (`Evidence.topical`). Such a page is kept (it *was* read, and a generic scam-advice
+  page is genuinely negative) but it cannot pass as support for a verdict about a
+  company it does not mention.
+- **Searches buy evidence, not vocabulary.** A claim earns a search only when it names
+  a mechanic the rule engine scores — a fee, selection without an interview, a
+  guarantee, an inducement (`query_builder.CLAIM_MECHANISM_TERMS`) — and the search is
+  for that mechanic rather than the claim sentence, which no search engine would match.
+  Eligibility conditions the model reports as claims ("no active backlogs", "any
+  branch", "2026 batch") earn no search at all: quoting one returns pages about the
+  condition itself, which is how an employer ends up with a backlog explainer among
+  its sources. Negation is the engine's own test, so "no registration fee" is not a fee
+  claim while "no interview" still is, and a fee the posting demands is still searched
+  through `money_request`.
 - **Deterministic verdict.** The LLM extracts and summarizes; the score, level and
   signals come from the rule engine, so results are reproducible and explainable.
 - **Honest mock mode.** Demo data is labelled, deterministic, and never presented as real

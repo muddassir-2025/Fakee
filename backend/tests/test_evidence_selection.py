@@ -93,6 +93,85 @@ def test_selection_is_deterministic(scenario: dict) -> None:
     assert _render(scenario) == _render(scenario)
 
 
+def _page(category: str, title: str, url: str, snippet: str, domain: str) -> SearchResult:
+    return SearchResult(
+        query="q",
+        category=category,
+        title=title,
+        url=url,
+        snippet=snippet,
+        source_domain=domain,
+    )
+
+
+# The generic pages a run like the reported one actually captured: the searches
+# "<employer> <claim>" and "<employer> telegram job offer" return backlog
+# explainers and Telegram job boards rather than anything about the employer.
+GENERIC_PAGES = [
+    _page(
+        "specific_claims",
+        "What is backlog university",
+        "https://openeducat.org/articles/what-is-backlog-university/",
+        "A backlog is a subject you must clear. " * 40,
+        "openeducat.org",
+    ),
+    _page(
+        "specific_claims",
+        "What is no active backlogs? - Brainly.in",
+        "https://brainly.in/question/57331822",
+        "What is the meaning of no active backlogs? " * 40,
+        "brainly.in",
+    ),
+    _page(
+        "channel_complaints",
+        "Telegram Jobs (NOW HIRING)",
+        "https://www.ziprecruiter.com/Jobs/Telegram",
+        "Drive outreach via Telegram BD communities. " * 40,
+        "ziprecruiter.com",
+    ),
+]
+
+
+def _employer_pages() -> list[SearchResult]:
+    return [
+        _page(
+            "company_reviews",
+            f"Infosys page {index}",
+            f"https://infosys-site-{index}.example/infosys",
+            "Infosys Limited is an Indian multinational IT company. " * 40,
+            f"infosys-site-{index}.example",
+        )
+        for index in range(3)
+    ]
+
+
+def test_generic_pages_are_not_offered_as_evidence() -> None:
+    """A page that never names the company must not reach the model as evidence.
+
+    Ranking put the generic pages last but the character budget still had room
+    for them, so they reached the model as if they were evidence about the
+    employer, the analyst listed them among the URLs it relied on, and the panel
+    displayed a "what is a backlog" explainer as a source for that employer.
+    """
+    user_input = heuristic_extract("Company: Infosys\nRole: Internship\nNo active backlogs")
+    rendered = _render_results([*GENERIC_PAGES, *_employer_pages()], user_input)
+
+    for page in _employer_pages():
+        assert page.url in rendered, f"the employer's own page {page.url} was dropped"
+    for page in GENERIC_PAGES:
+        assert page.url not in rendered, f"generic page {page.url} was offered as evidence"
+
+
+def test_generic_pages_are_still_shown_when_no_page_names_the_company() -> None:
+    """With nothing on-topic captured, the generic pages are all there is.
+
+    Excluding them there would leave the model an empty prompt, and "these
+    results never mention the company" is the reading worth having.
+    """
+    rendered = _render_results(GENERIC_PAGES, heuristic_extract("Company: Infosys"))
+    assert GENERIC_PAGES[0].url in rendered
+
+
 def test_all_pages_are_kept_when_they_fit() -> None:
     """Selection must not drop anything when the whole set is within budget."""
     results = [

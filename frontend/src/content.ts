@@ -9,7 +9,9 @@
 /** Where the extension lives. Set `storeUrl` once the listing is published. */
 export const EXTENSION = {
   name: "Fakee",
-  version: "0.1.0",
+  // Shown next to the install steps, so it must match `extension/manifest.json`
+  // — the version of the package users actually install.
+  version: "1.0.9",
   chromeVersion: "116",
   /**
    * Chrome Web Store listing URL. Paste it here once the listing is published,

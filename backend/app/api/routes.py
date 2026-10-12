@@ -488,11 +488,13 @@ async def budget_status(
 ) -> BudgetStatus:
     """The free allowances a run spends, as one bar's worth of segments.
 
-    Stored server-side and shared by every visitor — the Groq and Brave quotas
-    belong to the deployment's single free account — so the bar neither resets
-    when a client reconnects nor differs between users. Groq always applies;
-    the other budgets are returned only when the caller says it has that
-    provider in play, since a DuckDuckGo run never touches the Brave quota.
+    Stored server-side and shared by every visitor: one row per provider window,
+    with no user, session or client column, so the bar neither resets when a
+    client reconnects nor differs between users. Groq's reading comes from the
+    backend's own key; the Brave reading is whichever one a reporting client last
+    saw. Groq always applies; the other budgets are returned only when the caller
+    says it has that provider in play, since a DuckDuckGo run never touches the
+    Brave quota.
     """
     segments = budget_store.build_segments(await budget_store.read_budget_rows(session))
 

@@ -136,6 +136,49 @@ async def test_empty_client_capture_is_not_answered_with_mock(client: httpx.Asyn
 
 
 @pytest.mark.asyncio
+async def test_pages_that_never_name_the_employer_are_not_evidence(
+    client: httpx.AsyncClient,
+) -> None:
+    """The pages-read list must not present a background page as support.
+
+    The extension posts back every page it read, including generic scam-awareness
+    pages that a "<company> scam" search returns. Those never name the employer,
+    so they cannot be evidence about them: they stay out of the list, and the
+    items that are in it carry the field the clients use to label background.
+    """
+    response = await client.post(
+        "/api/investigate/with-evidence",
+        json={
+            "text": SCAM_TEXT,
+            "persist": False,
+            "pages": [
+                {
+                    "url": "https://advice.example/beware-job-scams",
+                    "title": "Beware of online job scams",
+                    "text": (
+                        "Scammers ask candidates for a registration fee over WhatsApp. " * 5
+                    ),
+                },
+                {
+                    "url": "https://forum.example/abc-technologies",
+                    "title": "ABC Technologies is a scam",
+                    "text": (
+                        "ABC Technologies is a scam: they asked me for a registration "
+                        "fee. " * 5
+                    ),
+                },
+            ],
+        },
+    )
+    assert response.status_code == 200
+    by_url = {
+        item["source_url"]: item for item in response.json()["investigation"]["evidence"]
+    }
+    assert "https://advice.example/beware-job-scams" not in by_url
+    assert by_url["https://forum.example/abc-technologies"]["topical"] is True
+
+
+@pytest.mark.asyncio
 async def test_structured_input_skips_re_extraction(client: httpx.AsyncClient) -> None:
     plan = (await client.post("/api/queries", json={"text": SCAM_TEXT})).json()
     response = await client.post(

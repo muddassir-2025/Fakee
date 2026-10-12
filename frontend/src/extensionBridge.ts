@@ -58,6 +58,8 @@ export interface Evidence {
   title?: string | null;
   summary: string;
   relevance: number;
+  /** False when the page never mentions the company — background, not support. */
+  topical?: boolean;
 }
 
 export interface EvidenceCoverage {

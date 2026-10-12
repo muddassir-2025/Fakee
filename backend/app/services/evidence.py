@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Iterable
 
 from ..config import settings
 from ..schemas import (
@@ -226,6 +227,18 @@ def _matches_topic(blob: str, tokens: set[str]) -> bool:
     return any(token in blob for token in tokens)
 
 
+def _is_on_topic(result: SearchResult, tokens: set[str]) -> bool:
+    """True when a captured page is actually about the company under review.
+
+    One predicate behind ranking, prompt selection and coverage reporting, so
+    the three cannot disagree about which pages are evidence about the company.
+    Mock pages (demo mode) are always usable.
+    """
+    if result.is_mock:
+        return True
+    return _matches_topic(f"{result.title} {result.snippet}".lower(), tokens)
+
+
 def _looks_negative(blob: str) -> bool:
     return any(term in blob for term in STRONG_NEGATIVE_TERMS)
 
@@ -342,6 +355,9 @@ def heuristic_structure(
                     title=result.title,
                     summary=result.snippet[:400],
                     relevance=0.85 if is_negative else 0.5,
+                    # Negative generic pages are kept (they were read) but marked
+                    # so they cannot pass as evidence about this employer.
+                    topical=on_topic,
                 )
             )
 
@@ -462,7 +478,12 @@ async def structure_evidence(
                     if isinstance(e, dict) and e.get("source_url")
                 ]
                 findings = [str(f)[:300] for f in (parsed.get("notable_findings") or [])]
+                # Cited URLs must be pages this run read; the model also emits
+                # addresses it was never given. See ``valid_sources``.
+                evidence = _only_read(evidence, included, user_input)
                 analyst = _parse_analyst(parsed.get("analyst")) if include_analyst else None
+                if analyst is not None:
+                    analyst.sources_used = valid_sources(analyst.sources_used, included)
                 # Sanity: never report more negatives than mentions.
                 reviews.negative_mentions = min(reviews.negative_mentions, reviews.total_mentions)
                 # Keep the structured result when the analyst was produced even if
@@ -520,7 +541,7 @@ def _page_relevance(result: SearchResult, tokens: set[str], company_domains: set
     # A page that never names the company cannot corroborate anything about it:
     # a search for "<company> scam" returns generic advice pages that swamp a
     # small budget unless they are pushed to the back.
-    on_topic = result.is_mock or _matches_topic(blob, tokens)
+    on_topic = _is_on_topic(result, tokens)
     score += 3.0 if on_topic else -1.0
 
     # A page describing the brand being impersonated shows it as the victim.
@@ -635,6 +656,28 @@ def _page_content(result: SearchResult, tokens: set[str]) -> str:
     return (result.snippet or "").strip()[:PER_RESULT_CHARS]
 
 
+def _prompt_order(results: list[SearchResult], user_input: UserInput) -> list[SearchResult]:
+    """The pages to put in front of the model: only evidence about the company.
+
+    Ranking alone was not enough. The character budget is the only bound on how
+    many pages get in, so every generic page that still fitted was handed to the
+    model as though it were evidence about the company — and the analyst, asked
+    to name the URLs it relied on, listed them. That is how a "what is a backlog"
+    explainer ended up displayed as a source for an employer it never mentions.
+
+    A page that never names the company is therefore offered only when the run
+    has no on-topic page at all: there it is all there is to show, and the
+    model's "these results never mention the company" reading is worth having.
+    The moment one page names the company, the generic pages stop being offered.
+    """
+    tokens = _topic_tokens(user_input)
+    on_topic: list[SearchResult] = []
+    off_topic: list[SearchResult] = []
+    for result in select_results_for_prompt(results, user_input):
+        (on_topic if _is_on_topic(result, tokens) else off_topic).append(result)
+    return on_topic or off_topic
+
+
 def render_prompt(
     results: list[SearchResult], user_input: UserInput
 ) -> tuple[str, list[SearchResult], int]:
@@ -653,7 +696,7 @@ def render_prompt(
     included: list[SearchResult] = []
     signal_sentences = 0
     used = 0
-    for result in select_results_for_prompt(results, user_input):
+    for result in _prompt_order(results, user_input):
         title = (result.title or "")[:200]
         header = (
             f"[{len(blocks) + 1}] category={result.category} url={result.url}\n"
@@ -677,6 +720,67 @@ def _render_results(results: list[SearchResult], user_input: UserInput) -> str:
     return render_prompt(results, user_input)[0]
 
 
+def _url_key(url: str) -> str:
+    """A URL reduced to what identifies the page, for matching a citation.
+
+    Deliberately tolerant: a model reliably echoes an address with a different
+    scheme, a ``www.`` prefix, a trailing slash or a fragment, and a citation is
+    only trustworthy when it resolves to a page this run actually read.
+    """
+    text = (url or "").strip()
+    if not text:
+        return ""
+    text = re.split(r"[?#]", text, maxsplit=1)[0]
+    text = re.sub(r"^[a-z][a-z0-9+.-]*://", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"^www\.", "", text, flags=re.IGNORECASE)
+    return text.rstrip("/").lower()
+
+
+def valid_sources(cited: Iterable[str], results: Iterable[SearchResult]) -> list[str]:
+    """The citations that are genuinely sources of this investigation.
+
+    The analyst is asked for "the URLs you actually relied on" and nothing
+    checked that answer, so a URL the model was never given still arrived in the
+    panel as a confident link — and a link to a page that was never read is the
+    most damaging thing a report can display. A citation is kept only when it
+    resolves to a page this run captured, and the *captured* address is returned
+    so the panel never renders the model's guess at a URL.
+    """
+    captured = {_url_key(r.url): r.url for r in results if r.url}
+    kept: list[str] = []
+    for url in cited:
+        match = captured.get(_url_key(url))
+        if match and match not in kept:
+            kept.append(match)
+    return kept
+
+
+def _only_read(
+    items: list[Evidence], included: Iterable[SearchResult], user_input: UserInput
+) -> list[Evidence]:
+    """Evidence items that cite a page this run actually read.
+
+    Same rule as :func:`valid_sources`, for the evidence list: the panel renders
+    every cited URL as a link, so a citation the model produced from memory shows
+    up as a source of the verdict. The address is replaced by the captured one,
+    which also keeps it matching the provider label the extension attached to
+    that page, and the item is graded for whether the page is about the company
+    at all so a background page cannot read as support. Rule-derived items for
+    pages the model never saw are added afterwards and carry their own grade, so
+    nothing real is lost.
+    """
+    tokens = _topic_tokens(user_input)
+    readable = {_url_key(r.url): r for r in included if r.url}
+    kept: list[Evidence] = []
+    for item in items:
+        page = readable.get(_url_key(item.source_url))
+        if page is not None:
+            item.source_url = page.url
+            item.topical = _is_on_topic(page, tokens)
+            kept.append(item)
+    return kept
+
+
 def has_topical_evidence(results: list[SearchResult], user_input: UserInput) -> bool:
     """True when at least one captured page is actually about this company.
 
@@ -687,10 +791,7 @@ def has_topical_evidence(results: list[SearchResult], user_input: UserInput) -> 
     tokens = _topic_tokens(user_input)
     if not tokens:
         return bool(results)  # cannot judge topicality; assume usable
-    return any(
-        r.is_mock or _matches_topic(f"{r.title} {r.snippet}".lower(), tokens)
-        for r in results
-    )
+    return any(_is_on_topic(r, tokens) for r in results)
 
 
 def _unseen(

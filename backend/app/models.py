@@ -216,11 +216,13 @@ class ProviderBudget(Base):
 
     Two properties are deliberate, and both come from how the allowances work:
 
-    * **Global, never per user.** The Groq and Brave quotas belong to the
-      deployment's single free account, not to a visitor, so there is exactly one
-      row per provider window and everybody sees the same numbers. There is
-      deliberately no user/session column here — two clients must never be able
-      to diverge.
+    * **Global, never per user.** An allowance belongs to an API account, not to
+      a visitor, so there is exactly one row per provider window and everybody
+      sees the same numbers. There is deliberately no user/session column here —
+      two clients must never be able to diverge. Note that the Brave reading is
+      only as shared as the key it came from: the report carries numbers, not an
+      identity, so it matches the deployment's key exactly while clients use one
+      account and is indicative when each client brings its own.
     * **In the database, not in process memory.** The free-tier host spins the
       instance down, and an in-memory snapshot came back empty on every restart:
       the panel showed "Run an investigation to load the Groq budget" long after

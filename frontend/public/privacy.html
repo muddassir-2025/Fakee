@@ -287,7 +287,7 @@
           Fakee investigates job and internship postings for scam signals. This page explains exactly
           what the website and the Chrome extension read, send and keep — and what they never do.
         </p>
-        <p class="meta">Last updated 9 October 2026 · website and Chrome extension</p>
+        <p class="meta">Last updated 12 October 2026 · website and Chrome extension</p>
 
         <div class="card">
           <h2>The short version</h2>
@@ -312,7 +312,9 @@
             <li>
               No advertising, no tracking cookies, and no reading of pages you did not ask it to
               check. The only traffic measurement is cookieless, aggregate page-view counting on the
-              website (see section 7) — the extension itself reports nothing about your usage.
+              website (see section 7). The extension reports one thing of its own: how much search
+              allowance the run just spent, as the provider's own numbers — never your queries, the
+              pages it read, or a profile (see section 2).
             </li>
           </ul>
         </div>
@@ -336,13 +338,28 @@
         <p>When you run an investigation, the following is sent to the backend you have configured:</p>
         <ul>
           <li>the posting text you pasted (or typed into the website panel);</li>
-          <li>the readable text of each page the crawler captured, together with its URL.</li>
+          <li>the readable text of each page the crawler captured, together with its URL;</li>
+          <li>
+            the search allowance the run spent, whenever it searched with Brave: the numbers Brave
+            itself returned in that reply's rate-limit headers — how many searches the window
+            allows, how many are left, and how long until it resets. Three numbers, no text, no
+            URLs, and nothing that identifies you or what you searched for.
+          </li>
         </ul>
         <p>
-          The backend then uses that content as follows. Each item is a separate party, disclosed
-          here because it is part of how a verdict is produced:
+          The search engine you select is contacted directly by your browser; the backend then
+          uses the content above as follows. Each item is a separate party, disclosed here because
+          it is part of how a verdict is produced:
         </p>
         <ul>
+          <li>
+            <strong>Search engine you select (Brave, DuckDuckGo, TinyFish, SERPdive).</strong> The
+            <em>queries</em> the extension built from the posting — a company name, a domain, a
+            phrase to look up — go from your browser to whichever engine you selected. The posting
+            text itself is not sent with them. Choosing <strong>self-hosted SearXNG</strong>
+            instead sends the queries to an instance you run, rather than to a search
+            engine's API from your browser.
+          </li>
           <li>
             <strong>LLM provider (Groq).</strong> The posting text and the captured page evidence are
             sent for extraction and summarisation — the "what the user reported" and "what the
@@ -389,6 +406,14 @@
             review status, on the website's <em>My reports</em> page.
           </li>
           <li>
+            <strong>Allowance readings.</strong> One row per provider window records how much of
+            each free allowance is left: the search allowance the extension reported, and the
+            allowance read from the backend's own LLM replies. It is <em>not</em> tied to a person —
+            there is no user, session or client column — so every visitor sees the same reading,
+            it cannot be traced back to whoever ran the search, and a new reading for that window
+            replaces the old one.
+          </li>
+          <li>
             <strong>Company-level cache.</strong> A finished result may be cached for up to 24 hours
             so a repeated check of the same company does not re-run the whole pipeline. The cache
             holds public intelligence only — your raw text is stripped before anything is cached.
@@ -417,6 +442,10 @@
             page views in aggregate, cookielessly (section 7).
           </li>
           <li>No selling or renting of personal data.</li>
+          <li>
+            No report about you: the allowance reading is numbers, not your queries, the pages you
+            visited, or a usage history of any kind.
+          </li>
           <li>No reading of pages unrelated to a run.</li>
           <li>No sharing beyond the providers in section 2.</li>
         </ul>

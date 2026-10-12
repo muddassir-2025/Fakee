@@ -300,7 +300,7 @@ function evidenceCard() {
           </li>`,
   ).join("\n          ");
   return `<section class="card">
-        <h2 class="section-title">Supporting evidence (12 pages read)</h2>
+        <h2 class="section-title">Pages read (12)</h2>
         <ul class="evidence">
           ${items}
         </ul>

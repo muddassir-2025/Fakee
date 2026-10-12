@@ -206,7 +206,13 @@ export function VerdictResult({
 
       {/* ----------------------------------------------------------- evidence */}
       {!!evidence.length && (
-        <Panel title={`Evidence (${evidence.length})`}>
+        // Everything the run read, not only what supports the verdict: entries
+        // that never mention the employer are labelled as such below. The count
+        // is pages captured (the same number the extension panel shows), not the
+        // number of items listed here.
+        <Panel
+          title={`Pages read (${pagesCaptured ?? coverage?.pages_captured ?? evidence.length})`}
+        >
           <ul className="space-y-3">
             {evidence.slice(0, 12).map((item: Evidence, index) => (
               <li
@@ -226,6 +232,11 @@ export function VerdictResult({
                   >
                     {item.source_domain || item.source_url}
                   </a>
+                )}
+                {item.topical === false && (
+                  <span className="mt-1.5 inline-block rounded-full border border-line px-2 py-0.5 font-mono text-[9.5px] uppercase tracking-wider text-faint">
+                    does not mention the employer
+                  </span>
                 )}
               </li>
             ))}
