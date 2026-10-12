@@ -91,6 +91,9 @@ async function resolveSettings(incoming) {
     "siteUrl",
     "searchProvider",
     "braveKey",
+    "searxngUrl",
+    "tinyfishKey",
+    "serpdiveKey",
     "includeAnalyst",
   ]);
   return { ...saved, ...override };

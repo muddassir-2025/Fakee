@@ -211,6 +211,44 @@ REPORT_STATUSES: tuple[str, ...] = (
 REPORT_STATUSES_COUNTED: tuple[str, ...] = (REPORT_STATUS_PENDING, REPORT_STATUS_APPROVED)
 
 
+class ProviderBudget(Base):
+    """Last reading of a rate-limited provider's remaining budget.
+
+    Two properties are deliberate, and both come from how the allowances work:
+
+    * **Global, never per user.** The Groq and Brave quotas belong to the
+      deployment's single free account, not to a visitor, so there is exactly one
+      row per provider window and everybody sees the same numbers. There is
+      deliberately no user/session column here — two clients must never be able
+      to diverge.
+    * **In the database, not in process memory.** The free-tier host spins the
+      instance down, and an in-memory snapshot came back empty on every restart:
+      the panel showed "Run an investigation to load the Groq budget" long after
+      a run had happened. A row survives that.
+
+    ``budget_key`` is an upsert target, not a user key. Nothing stored here is
+    user data, so there is nothing to delete per user.
+    """
+
+    __tablename__ = "provider_budgets"
+
+    budget_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), index=True)
+    # "minute" | "day" | "month" — the window the allowance refills on. Named
+    # `period` rather than `window`, which is a reserved word in PostgreSQL.
+    period: Mapped[str] = mapped_column(String(16))
+    limit_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    remaining: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # When the provider says the window refills. Known only when it reported a
+    # reset duration; once it passes, the allowance is full again.
+    reset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Where the reading came from ("groq_headers", "brave_headers").
+    source: Mapped[str] = mapped_column(String(32), default="headers")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+
 class UserReport(Base):
     """A scam report filed by a signed-in user.
 

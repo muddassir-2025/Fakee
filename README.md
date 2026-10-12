@@ -168,6 +168,16 @@ Side panel → POST /api/queries → search + scrape in the browser
 The backend enables this with two endpoints (above) and allows the extension
 origin via `CORS_ORIGIN_REGEX` (default `chrome-extension://.*`).
 
+The panel's budget bar is one bar over the two free allowances a run can spend.
+It is **stored server-side in `provider_budgets` and shared by everyone** — the
+Groq and Brave quotas belong to the deployment's single free account, so the bar
+neither resets when a client reconnects nor differs between users. Groq's
+rate-limit headers are captured on every backend call; Brave is called from the
+browser, so the extension reports what it read (`POST /api/budget/brave`) and the
+backend keeps it. Each budget is its own track on the bar, sized by its own
+remaining share, so a daily request quota and a monthly search quota are never
+averaged into a number that hides one running out.
+
 The website can drive the same crawl: it connects to the extension over a Port
 (see [The website ⇄ extension bridge](#the-website--extension-bridge)) so a
 visitor can paste a posting on the site and read the verdict there, with the
@@ -228,6 +238,9 @@ nothing else depends on it.
 | `GET`  | `/api/admin/reports`        | Every report with its reporter (**admin only**) |
 | `POST` | `/api/admin/reports/{id}/review` | Accept / reject / requeue a report (**admin only**) |
 | `GET`  | `/api/admin/overview`       | Dashboard headline numbers (**admin only**) |
+| `GET`  | `/api/budget`               | Remaining Groq + Brave allowance (`?in_play=brave` filters to what a run can spend) |
+| `POST` | `/api/budget/brave`         | The extension reports the Brave quota it read from its own response headers |
+| `GET`  | `/api/groq/quota`           | Raw last Groq rate-limit snapshot (in-process) |
 | `GET`  | `/api/stats`                | Aggregate stats                      |
 | `GET`  | `/api/metrics`              | Operational metrics (JSON)           |
 | `GET`  | `/api/metrics/prometheus`   | Same metrics, Prometheus text format |

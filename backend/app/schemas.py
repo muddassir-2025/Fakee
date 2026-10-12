@@ -36,6 +36,54 @@ OpportunityStatus = Literal[
 
 
 # --------------------------------------------------------------------------
+# Budget — the free allowances the panel's single bar covers
+# --------------------------------------------------------------------------
+class BudgetSegment(BaseModel):
+    """One provider window's remaining allowance (e.g. Groq requests today)."""
+
+    key: str
+    provider: str
+    label: str
+    period: str
+    # True for the windows the bar draws; False for footnotes (the per-minute
+    # Groq token window), which would make the bar jump without adding signal.
+    in_bar: bool = True
+    limit: int | None = None
+    remaining: int | None = None
+    percent_remaining: float | None = None
+    reset_at: datetime | None = None
+    # The reset time the provider reported has passed, so the window is full
+    # again — assumed from its own clock, not measured.
+    reset_assumed: bool = False
+    # No usable reading: nothing measured it, or the reading is older than its
+    # own window and there is no reset time to carry it forward.
+    stale: bool = False
+    updated_at: datetime | None = None
+    source: str = "headers"
+
+
+class BudgetStatus(BaseModel):
+    """Groq + Brave budget, shared by every visitor (it is one free account)."""
+
+    enabled: bool
+    segments: list[BudgetSegment] = Field(default_factory=list)
+
+
+class BraveBudgetReport(BaseModel):
+    """What the extension read in Brave's own rate-limit headers.
+
+    Brave reports several windows at once, comma-separated, and the bar tracks
+    the *monthly* quota: the per-second burst window refills constantly and says
+    nothing about how much of the free allowance is left.
+    """
+
+    limit: int | None = Field(default=None, ge=0, le=1_000_000)
+    remaining: int | None = Field(default=None, ge=0, le=1_000_000)
+    # Seconds until the window refills; Brave's own figure for that window.
+    reset_seconds: float | None = Field(default=None, ge=0, le=40 * 86_400)
+
+
+# --------------------------------------------------------------------------
 # JSON 1 — user-provided information, normalized by Groq
 # --------------------------------------------------------------------------
 class CompanyInfo(BaseModel):

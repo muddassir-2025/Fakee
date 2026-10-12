@@ -73,6 +73,28 @@ class GroqClient:
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 
+    async def _persist_quota(self) -> None:
+        """Mirror the latest snapshot into the shared, durable budget store.
+
+        Best-effort by design: this is display-only bookkeeping, so it must
+        never fail (or slow down) a real request. The database is what makes the
+        panel's bar survive the free-tier host spinning the instance down, which
+        is why the snapshot is written on every response rather than kept in
+        memory alone.
+        """
+        if not self._quota:
+            return
+        try:
+            # Imported here so this client stays usable without a database.
+            from ..db import SessionLocal
+            from .budget import record_groq_snapshot
+
+            async with SessionLocal() as session:
+                await record_groq_snapshot(session, self._quota)
+                await session.commit()
+        except Exception as exc:  # noqa: BLE001 - bookkeeping must not raise
+            logger.debug("Could not persist the Groq budget snapshot: %s", exc)
+
     def quota(self) -> dict:
         """Return the last-known Groq budget (empty until the first call)."""
         return {"enabled": self.enabled, **self._quota}
@@ -128,8 +150,10 @@ class GroqClient:
                     await asyncio.sleep(self._retry_delay(attempt, None))
                     continue
 
-                # Capture quota headers on every response, including 429s.
+                # Capture quota headers on every response, including 429s — a
+                # 429 is exactly when the bar most needs to be accurate.
                 self._record_quota(response)
+                await self._persist_quota()
 
                 if response.status_code in RETRYABLE_STATUS and attempt < attempts - 1:
                     delay = self._retry_delay(attempt, response)

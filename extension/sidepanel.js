@@ -8,6 +8,11 @@ const DEFAULT_SETTINGS = {
   siteUrl: "http://localhost:5173",
   searchProvider: "duckduckgo",
   braveKey: "",
+  // Base URL of the user's own SearXNG instance (used only when it is selected).
+  searxngUrl: "",
+  // Keys for the free-tier hosted providers, each used only when selected.
+  tinyfishKey: "",
+  serpdiveKey: "",
   includeAnalyst: true,
 };
 
@@ -19,7 +24,16 @@ const els = {
   apiBase: document.getElementById("api-base"),
   siteUrl: document.getElementById("site-url"),
   provider: document.getElementById("provider"),
+  braveFields: document.getElementById("brave-fields"),
   braveKey: document.getElementById("brave-key"),
+  tinyfishFields: document.getElementById("tinyfish-fields"),
+  tinyfishKey: document.getElementById("tinyfish-key"),
+  serpdiveFields: document.getElementById("serpdive-fields"),
+  serpdiveKey: document.getElementById("serpdive-key"),
+  searxngFields: document.getElementById("searxng-fields"),
+  searxngUrl: document.getElementById("searxng-url"),
+  searxngTest: document.getElementById("searxng-test"),
+  searxngTestStatus: document.getElementById("searxng-test-status"),
   includeAnalyst: document.getElementById("include-analyst"),
   run: document.getElementById("run"),
   progress: document.getElementById("progress"),
@@ -30,7 +44,7 @@ const els = {
   empty: document.getElementById("empty"),
   quota: document.getElementById("quota"),
   quotaValue: document.getElementById("quota-value"),
-  quotaFill: document.getElementById("quota-fill"),
+  quotaBar: document.getElementById("quota-bar"),
   quotaNote: document.getElementById("quota-note"),
   account: document.getElementById("account"),
   accountEmail: document.getElementById("account-email"),
@@ -52,6 +66,10 @@ let sessionStale = false;
 // re-running the investigation.
 let lastResult = null;
 let lastPagesCaptured = 0;
+// Which provider supplied each page (url -> label), and any non-blocking
+// warnings from the run — kept so a re-render (after sign-in/out) preserves them.
+let lastProviders = {};
+let lastWarnings = [];
 
 // ------------------------------------------------------------------ theme ---
 function applyTheme(theme) {
@@ -87,6 +105,9 @@ async function loadSettings() {
     "siteUrl",
     "searchProvider",
     "braveKey",
+    "searxngUrl",
+    "tinyfishKey",
+    "serpdiveKey",
     "includeAnalyst",
     SESSION_KEY,
   ]);
@@ -96,7 +117,11 @@ async function loadSettings() {
   els.siteUrl.value = settings.siteUrl;
   els.provider.value = settings.searchProvider;
   els.braveKey.value = settings.braveKey;
+  els.searxngUrl.value = settings.searxngUrl;
+  els.tinyfishKey.value = settings.tinyfishKey;
+  els.serpdiveKey.value = settings.serpdiveKey;
   els.includeAnalyst.checked = settings.includeAnalyst !== false;
+  syncProviderFields();
 }
 
 function readSettingsFromForm() {
@@ -105,6 +130,9 @@ function readSettingsFromForm() {
     siteUrl: els.siteUrl.value.trim().replace(/\/+$/, "") || DEFAULT_SETTINGS.siteUrl,
     searchProvider: els.provider.value,
     braveKey: els.braveKey.value.trim(),
+    searxngUrl: els.searxngUrl.value.trim().replace(/\/+$/, ""),
+    tinyfishKey: els.tinyfishKey.value.trim(),
+    serpdiveKey: els.serpdiveKey.value.trim(),
     includeAnalyst: els.includeAnalyst.checked,
     perQuery: 6,
     maxPages: 40,
@@ -165,8 +193,10 @@ chrome.runtime.onMessage.addListener((message) => {
     finishRun();
     lastResult = message.result;
     lastPagesCaptured = message.pagesCaptured || 0;
-    renderResult(message.result, message.pagesCaptured);
-    refreshQuota();
+    lastProviders = message.providers || {};
+    lastWarnings = message.warnings || [];
+    renderResult(message.result, message.pagesCaptured, lastProviders, lastWarnings);
+    refreshBudget();
   } else if (message.type === "ERROR") {
     finishRun();
     showError(message.message);
@@ -178,61 +208,130 @@ function finishRun() {
   hide(els.progress);
 }
 
-// ------------------------------------------------------------------ quota ---
+// ----------------------------------------------------------------- budget ---
 // Upper bound: a run can spend two Groq requests (query plan + evidence). It is
 // often fewer — the extraction call is skipped when the text is already clear —
 // which is one of the reasons this is stated as a cost rather than used to
 // project how many runs are left.
 const REQUESTS_PER_INVESTIGATION = 2;
 
-async function refreshQuota() {
+/**
+ * The search providers this configuration can actually spend budget on.
+ *
+ * Groq is always spent (every run reasons server-side). Brave only is when it is
+ * the chosen provider, or the fallback a self-hosted SearXNG instance drops to
+ * when it has a key. Saying so keeps a DuckDuckGo run from showing a Brave
+ * allowance it will never touch.
+ */
+function providersInPlay() {
+  const provider = els.provider.value;
+  const inPlay = [provider];
+  if (provider === "searxng" && els.braveKey.value.trim()) inPlay.push("brave");
+  return inPlay;
+}
+
+/**
+ * Load the shared budget: the free allowances a run spends, as one bar.
+ *
+ * It comes from the backend and is not keyed by user, so it is the same numbers
+ * for everyone and survives closing the panel — the allowances belong to the
+ * deployment's one free account, not to whoever is looking.
+ */
+async function refreshBudget() {
   try {
-    const response = await fetch(`${settings.apiBase}/groq/quota`, { cache: "no-store" });
+    const inPlay = encodeURIComponent(providersInPlay().join(","));
+    const response = await fetch(`${settings.apiBase}/budget?in_play=${inPlay}`, {
+      cache: "no-store",
+    });
     if (!response.ok) throw new Error(`Request failed (${response.status})`);
-    renderQuota(await response.json());
+    renderBudget(await response.json());
   } catch {
-    renderQuota(null);
+    hide(els.quota);
   }
 }
 
-function renderQuota(quota) {
-  if (!quota || !quota.enabled) {
+function renderBudget(budget) {
+  const segments = budget?.segments || [];
+  const inBar = segments.filter((segment) => segment.in_bar);
+  const detail = segments.filter((segment) => !segment.in_bar);
+  if (!segments.length) {
     hide(els.quota);
     return;
   }
   show(els.quota);
 
-  const limit = quota.limit_requests;
-  const remaining = quota.remaining_requests;
-  if (!limit || remaining == null) {
-    els.quotaValue.textContent = "—";
-    els.quotaFill.style.width = "0%";
-    els.quotaFill.className = "quota-fill";
-    els.quotaNote.textContent = "Run an investigation to load the Groq budget.";
-    return;
-  }
+  // The headline names the budgets in the same order as the bar's tracks, so
+  // which track is which is never a guess.
+  els.quotaValue.textContent = inBar.length
+    ? inBar.map((segment) => segmentHeadline(segment)).join("  ·  ")
+    : "—";
 
-  const pct = Math.max(0, Math.min(100, (remaining / limit) * 100));
-  els.quotaValue.textContent = `${remaining} / ${limit} requests left today`;
-  els.quotaFill.style.width = `${pct.toFixed(1)}%`;
-  els.quotaFill.className = `quota-fill ${pct > 50 ? "" : pct > 20 ? "warn" : "danger"}`.trim();
+  els.quotaBar.replaceChildren(...inBar.map((segment) => segmentEl(segment)));
+  els.quotaNote.textContent = noteLines(inBar, detail).join(" · ");
+}
 
-  // Report only what Groq actually sends, each figure with the window it
-  // belongs to: requests are a rolling daily budget, tokens a per-minute one
-  // that refills every minute. An invented "N investigations left" figure would
-  // have to guess, and it guessed badly — it divided the request budget by two
-  // and ignored the daily *token* ceiling, which binds far sooner (~200k TPD
-  // against ~2 Groq calls of 2-4k tokens per run).
-  const note = [];
-  if (quota.remaining_tokens != null && quota.limit_tokens != null) {
-    note.push(`${quota.remaining_tokens} / ${quota.limit_tokens} tokens left this minute`);
+/** "Groq requests 999/1000", or a dash while nothing has measured it. */
+function segmentHeadline(segment) {
+  if (segment.limit == null || segment.remaining == null) return `${segment.label} —`;
+  return `${segment.label} ${segment.remaining}/${segment.limit}`;
+}
+
+/** One track of the bar: its own fill width, coloured by its own reading. */
+function segmentEl(segment) {
+  const track = el("div", "quota-segment");
+  const pct = segment.percent_remaining;
+  const fill = el("div", `quota-fill${fillClass(pct)}`);
+  fill.style.width = `${pct == null ? 0 : Math.max(0, Math.min(100, pct))}%`;
+  track.append(fill);
+  track.title = segmentTitle(segment);
+  return track;
+}
+
+function fillClass(percent) {
+  if (percent == null) return "";
+  return percent > 50 ? "" : percent > 20 ? " warn" : " danger";
+}
+
+function segmentTitle(segment) {
+  const parts = [
+    `${segment.label}: ${segment.remaining ?? "unknown"} of ${segment.limit ?? "unknown"} left`,
+  ];
+  if (segment.reset_at && !segment.reset_assumed) {
+    parts.push(`resets ${new Date(segment.reset_at).toLocaleString()}`);
+  } else if (segment.reset_assumed) {
+    parts.push("the window has reset since it was last measured");
+  } else if (segment.updated_at) {
+    parts.push(`as of ${new Date(segment.updated_at).toLocaleTimeString()}`);
   }
-  note.push(`each run costs up to ${REQUESTS_PER_INVESTIGATION} requests`);
-  els.quotaNote.textContent = note.join(" · ");
+  return parts.join(" · ");
+}
+
+/**
+ * The footnote under the bar.
+ *
+ * It carries the windows too short-lived to draw — Groq's per-minute tokens
+ * would make the bar jump on every run for no useful signal — plus what a run
+ * costs. Every figure is one the API actually measured with the window it
+ * belongs to: an "N investigations left" projection would have to guess, and it
+ * guessed badly before, dividing the daily request budget by two while ignoring
+ * the token ceiling that binds far sooner.
+ */
+function noteLines(inBar, detail) {
+  const lines = [];
+  for (const segment of detail) {
+    if (segment.limit == null || segment.remaining == null) continue;
+    const name = segment.label.toLowerCase().replace(/^groq /, "");
+    lines.push(`${segment.remaining} / ${segment.limit} ${name} left this ${segment.period}`);
+  }
+  if (inBar.length && inBar.every((segment) => segment.remaining == null)) {
+    lines.push("run an investigation to load the budget");
+  }
+  lines.push(`each run costs up to ${REQUESTS_PER_INVESTIGATION} requests`);
+  return lines;
 }
 
 // ---------------------------------------------------------------- render ----
-function renderResult(result, pagesCaptured) {
+function renderResult(result, pagesCaptured, providers = {}, warnings = []) {
   hide(els.error);
   hide(els.empty);
   els.result.replaceChildren();
@@ -242,6 +341,12 @@ function renderResult(result, pagesCaptured) {
   // reporter was looking at (the admin dashboard shows it).
   lastRun.riskLevel = risk.level || null;
   lastRun.riskScore = typeof risk.score === "number" ? risk.score : null;
+
+  // Non-blocking notices: a provider that failed without stopping the run.
+  for (const warning of warnings) {
+    els.result.append(el("p", "warning", warning));
+  }
+
   els.result.append(renderVerdict(risk));
 
   if (result.cached) {
@@ -269,7 +374,7 @@ function renderResult(result, pagesCaptured) {
     els.result.append(renderFindings(result.investigation.notable_findings));
   }
   if (result.investigation?.evidence?.length) {
-    els.result.append(renderEvidence(result.investigation.evidence, pagesCaptured));
+    els.result.append(renderEvidence(result.investigation.evidence, pagesCaptured, providers));
   }
 
   els.result.append(renderReportAction());
@@ -451,7 +556,7 @@ function renderFindings(findings) {
   return section;
 }
 
-function renderEvidence(evidence, pagesCaptured) {
+function renderEvidence(evidence, pagesCaptured, providers = {}) {
   const section = el("section", "card");
   const title = pagesCaptured
     ? `Supporting evidence (${pagesCaptured} pages read)`
@@ -461,7 +566,14 @@ function renderEvidence(evidence, pagesCaptured) {
   const list = el("ul", "evidence");
   for (const item of evidence.slice(0, 12)) {
     const li = el("li");
-    if (item.source_domain) li.append(el("div", "domain", item.source_domain));
+    // Say which search backend supplied this source, so a mixed run (SearXNG
+    // primary with a fallback) is visible rather than implied.
+    const provider = item.source_url ? providers[item.source_url] : "";
+    if (item.source_domain || provider) {
+      const row = el("div", "domain", item.source_domain || "");
+      if (provider) row.append(el("span", "provider-tag", `via ${provider}`));
+      li.append(row);
+    }
     if (item.title) li.append(el("strong", "", item.title));
     if (item.summary) li.append(el("p", "", item.summary));
     if (item.source_url) {
@@ -687,7 +799,7 @@ els.signOut.addEventListener("click", async () => {
   renderAccount();
   if (!els.result.hidden) {
     // Re-render the verdict so the report action reflects the sign-out.
-    renderResult(lastResult, lastPagesCaptured);
+    renderResult(lastResult, lastPagesCaptured, lastProviders, lastWarnings);
   }
 });
 
@@ -737,6 +849,71 @@ function showError(message) {
   if (els.result.hidden) show(els.empty);
 }
 
+// --------------------------------------------------------- search provider ---
+// A provider's own settings matter only while it is selected, so they appear
+// only then — with five providers, showing every key field at once would bury
+// the one that actually applies to the run.
+function syncProviderFields() {
+  const provider = els.provider.value;
+  els.braveFields.hidden = provider !== "brave";
+  els.tinyfishFields.hidden = provider !== "tinyfish";
+  els.serpdiveFields.hidden = provider !== "serpdive";
+  els.searxngFields.hidden = provider !== "searxng";
+}
+// Which budgets are in play changes with the provider, so the bar is re-read
+// rather than left showing an allowance this configuration cannot spend.
+els.provider.addEventListener("change", () => {
+  syncProviderFields();
+  refreshBudget();
+});
+els.braveKey.addEventListener("change", refreshBudget);
+
+/**
+ * Probe the configured instance with one query and report what came back.
+ *
+ * SearXNG answers in JSON only when its `json` output format is enabled, so a
+ * reachable instance can still be unusable — this separates "not running" from
+ * "running but misconfigured" from "running but its engines are blocked".
+ */
+async function testSearxng() {
+  const base = els.searxngUrl.value.trim().replace(/\/+$/, "");
+  if (!base) {
+    els.searxngTestStatus.textContent = "Enter your instance URL first.";
+    return;
+  }
+  els.searxngTest.disabled = true;
+  els.searxngTestStatus.textContent = "Testing…";
+  try {
+    const response = await fetch(`${base}/search?q=${encodeURIComponent("job scam")}&format=json`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const body = await response.text();
+    let data = null;
+    try {
+      data = JSON.parse(body);
+    } catch {
+      data = null;
+    }
+    if (data === null) {
+      els.searxngTestStatus.textContent = /anomaly-modal|captcha|too many requests/i.test(body)
+        ? "Reached it, but it returned a block page — check its upstream engines."
+        : "Reached it, but the reply was not JSON — enable the json output format.";
+      return;
+    }
+    const count = (data.results || []).length;
+    els.searxngTestStatus.textContent = `Reachable — ${count} result${
+      count === 1 ? "" : "s"
+    } for a test query.`;
+  } catch {
+    els.searxngTestStatus.textContent =
+      "Could not reach it. Check the URL and that the instance is running.";
+  } finally {
+    els.searxngTest.disabled = false;
+  }
+}
+els.searxngTest.addEventListener("click", () => testSearxng());
+
 // ------------------------------------------------------------------ boot ----
 initTheme();
 
@@ -748,11 +925,13 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (session) sessionStale = false;
   renderAccount();
   if (!els.reports.hidden) refreshMyReports();
-  if (lastResult && !els.result.hidden) renderResult(lastResult, lastPagesCaptured);
+  if (lastResult && !els.result.hidden) {
+    renderResult(lastResult, lastPagesCaptured, lastProviders, lastWarnings);
+  }
 });
 
 loadSettings().then(() => {
-  refreshQuota();
+  refreshBudget();
   renderAccount();
   chrome.storage.local.get(["lastInput"]).then(({ lastInput }) => {
     if (lastInput) els.input.value = lastInput;

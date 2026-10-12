@@ -21,6 +21,8 @@ from ..schemas import (
     AdminReports,
     AnalystRequest,
     AnalystResponse,
+    BraveBudgetReport,
+    BudgetStatus,
     EvidenceInvestigationRequest,
     InvestigationRequest,
     InvestigationResponse,
@@ -34,6 +36,7 @@ from ..schemas import (
     ReportReviewResponse,
     UserProfile,
 )
+from ..services import budget as budget_store
 from ..services.exa import results_from_pages
 from ..services.evidence import structure_evidence
 from ..services.extraction import extract_user_input
@@ -465,10 +468,92 @@ async def admin_dashboard(
 async def groq_quota() -> dict:
     """Last-known Groq rate-limit budget, captured from the provider's headers.
 
-    Empty (only ``enabled``) until the first Groq call of the process, since the
-    limits are only reported in response headers.
+    In-process and therefore empty on a fresh start; ``/budget`` is the durable,
+    unified view the panel uses. Kept because it is a cheap way to see the raw
+    snapshot exactly as Groq reported it.
     """
     return groq_client.quota()
+
+
+@router.get("/budget", response_model=BudgetStatus)
+async def budget_status(
+    in_play: str | None = Query(
+        default=None,
+        description=(
+            "Comma-separated search providers this client has in play (e.g. "
+            "`brave`). Omit to return every stored budget."
+        ),
+    ),
+    session: AsyncSession = Depends(get_session),
+) -> BudgetStatus:
+    """The free allowances a run spends, as one bar's worth of segments.
+
+    Stored server-side and shared by every visitor — the Groq and Brave quotas
+    belong to the deployment's single free account — so the bar neither resets
+    when a client reconnects nor differs between users. Groq always applies;
+    the other budgets are returned only when the caller says it has that
+    provider in play, since a DuckDuckGo run never touches the Brave quota.
+    """
+    segments = budget_store.build_segments(await budget_store.read_budget_rows(session))
+
+    # A reading that has just been captured may not be written yet (or the write
+    # may have failed); fall back to the in-process snapshot so the bar is not
+    # blank while the numbers are in hand.
+    if not any(s["provider"] == budget_store.PROVIDER_GROQ for s in segments):
+        segments = budget_store.sort_segments(
+            [*segments, *budget_store.groq_segments_from_snapshot(groq_client.quota())]
+        )
+
+    providers = (
+        {part.strip().lower() for part in in_play.split(",") if part.strip()}
+        if in_play is not None
+        else None
+    )
+    return BudgetStatus(
+        enabled=settings.groq_enabled,
+        segments=budget_store.filter_in_play(segments, providers),
+    )
+
+
+@router.post("/budget/brave", dependencies=[Depends(limit_queries)])
+async def report_brave_budget(
+    payload: BraveBudgetReport,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Record the Brave allowance the extension just read from its own response.
+
+    Brave is called from the user's browser, so its rate-limit headers never
+    reach this process; the extension reports them so the shared bar can include
+    Brave. Unauthenticated on purpose (the extension runs anonymously) and
+    rate-limited: this only affects a displayed number, so a forged report can
+    mislead the bar and nothing else — the next real search overwrites it.
+    """
+    if payload.limit is None and payload.remaining is None:
+        raise HTTPException(
+            status_code=422, detail="Send at least one of `limit` or `remaining`."
+        )
+    if (
+        payload.limit is not None
+        and payload.remaining is not None
+        and payload.remaining > payload.limit
+    ):
+        raise HTTPException(
+            status_code=422, detail="`remaining` cannot exceed `limit`."
+        )
+
+    spec = budget_store.SEGMENTS_BY_KEY["brave_searches"]
+    await budget_store.record_budget(
+        session,
+        key=spec["key"],
+        provider=spec["provider"],
+        period=spec["period"],
+        limit=payload.limit,
+        remaining=payload.remaining,
+        reset_seconds=payload.reset_seconds,
+        source="brave_headers",
+    )
+    await session.commit()
+    return {"ok": True}
 
 
 @router.post(

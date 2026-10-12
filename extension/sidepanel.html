@@ -37,9 +37,49 @@
           <select id="provider">
             <option value="duckduckgo">DuckDuckGo (free, no key)</option>
             <option value="brave">Brave Search API (free tier)</option>
+            <option value="tinyfish">TinyFish Search API (free tier)</option>
+            <option value="serpdive">SERPdive (free “krill” tier)</option>
+            <option value="searxng">Self-Hosted SearXNG</option>
           </select>
-          <label class="label" for="brave-key">Brave API key (optional)</label>
-          <input id="brave-key" type="password" spellcheck="false" placeholder="only if using Brave" />
+
+          <div id="brave-fields" hidden>
+            <label class="label" for="brave-key">Brave API key</label>
+            <input id="brave-key" type="password" spellcheck="false" placeholder="from api.search.brave.com" />
+            <p class="field-note">Free tier: about 1,000 searches a month in monthly credit.</p>
+          </div>
+
+          <div id="tinyfish-fields" hidden>
+            <label class="label" for="tinyfish-key">TinyFish API key</label>
+            <input id="tinyfish-key" type="password" spellcheck="false" placeholder="from agent.tinyfish.ai" />
+            <p class="field-note">Free tier: 30 requests a minute, 12,000 a day per key.</p>
+          </div>
+
+          <div id="serpdive-fields" hidden>
+            <label class="label" for="serpdive-key">SERPdive API key</label>
+            <input
+              id="serpdive-key"
+              type="password"
+              spellcheck="false"
+              placeholder="sd_live_… from serpdive.com/dashboard/keys"
+            />
+            <p class="field-note">
+              Runs on SERPdive's free <code>krill</code> model — no credits, one request at a time.
+            </p>
+          </div>
+
+          <div id="searxng-fields" hidden>
+            <label class="label" for="searxng-url">SearXNG instance URL</label>
+            <input id="searxng-url" type="text" spellcheck="false" placeholder="http://localhost:8080" />
+            <div class="settings-row">
+              <button id="searxng-test" class="ghost" type="button">Test connection</button>
+              <span id="searxng-test-status" class="muted"></span>
+            </div>
+            <p class="field-note">
+              Use the instance's base URL (no <code>/search</code>). Its JSON output format must be
+              enabled (<code>search.formats: [json]</code> in <code>settings.yml</code>), and the
+              instance must be reachable from this browser — <code>localhost</code> is fine.
+            </p>
+          </div>
           <label class="checkbox-row" for="include-analyst">
             <input id="include-analyst" type="checkbox" checked />
             Include AI analyst (a few more tokens; off = frugal)
@@ -65,10 +105,10 @@
 
       <section id="quota" class="card quota" hidden>
         <div class="quota-row">
-          <span class="quota-label">Groq budget</span>
+          <span class="quota-label">Free budget</span>
           <span id="quota-value" class="quota-value">—</span>
         </div>
-        <div class="quota-bar"><div id="quota-fill" class="quota-fill"></div></div>
+        <div id="quota-bar" class="quota-bar"></div>
         <p id="quota-note" class="quota-note muted"></p>
       </section>
 

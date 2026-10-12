@@ -677,13 +677,25 @@ button.primary:disabled {
   font-size: 11.5px;
   color: var(--muted);
 }
+/* One bar, one track per budget the run can spend (Groq, and Brave when it is
+   in play). Each fill is its own budget's remaining share, so two allowances of
+   very different sizes stay comparable instead of being averaged together. */
 .quota-bar {
+  display: flex;
+  gap: 3px;
   height: 7px;
   margin-top: 7px;
   border-radius: 999px;
   overflow: hidden;
   background: var(--panel-2);
   border: 1px solid var(--line);
+}
+.quota-segment {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--panel-2);
 }
 .quota-fill {
   height: 100%;
@@ -882,6 +894,49 @@ button.primary:disabled {
 
 .report-item .ghost {
   margin-top: 8px;
+}
+
+/* ---------------------------------------------------------------- searxng -- */
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.settings-row .muted {
+  min-height: 1em;
+}
+
+.field-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--faint);
+}
+.field-note code {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+/* A non-blocking notice: the run continued, but something needs attention. */
+.warning {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  background: var(--warn-soft);
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--line));
+  color: var(--ink-soft);
+}
+
+.provider-tag {
+  margin-left: 6px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--faint);
 }
 
 /* ----------------------------------------------------------------- footer -- */
