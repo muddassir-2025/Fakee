@@ -61,27 +61,53 @@ async function runCrawl(text, cfg) {
 
   // --- 2. Search (discovery) -------------------------------------------
   const found = new Map(); // url -> {url,title,snippet,query,category}
-  let searched = 0;
+  const primary = primaryProvider(cfg);
   report({ type: "PROGRESS", phase: `Searching ${items.length} queries`, done: 0, total: items.length });
-  await mapLimit(items, 4, async (item) => {
-    let results = [];
-    try {
-      results = await searchWeb(item.query, cfg);
-    } catch {
-      results = []; // one blocked query must not abort the crawl
-    }
-    for (const r of results) {
-      if (!found.has(r.url)) found.set(r.url, { ...r, query: item.query, category: item.category });
-    }
-    searched += 1;
+  let searchError = await searchPass(items, primary, cfg, found, (done) =>
     report({
       type: "PROGRESS",
       phase: "Searching",
-      done: searched,
+      done,
       total: items.length,
       note: `${found.size} pages found`,
-    });
-  });
+    }),
+  );
+
+  // A provider that returns nothing is usually a block, not an empty web: search
+  // engines answer automated fetches with a blank page and no error (DuckDuckGo
+  // replays HTTP 202 with zero result nodes). Try the other provider once before
+  // giving up, so a provider-specific block becomes a working run rather than a
+  // dead end.
+  if (found.size === 0) {
+    const fallback = otherProvider(cfg);
+    if (fallback) {
+      const label = providerLabel(fallback);
+      report({
+        type: "PROGRESS",
+        phase: `Searching (${label})`,
+        done: 0,
+        total: items.length,
+        note: `retrying with ${label}`,
+      });
+      const fallbackError = await searchPass(
+        items,
+        fallback,
+        { ...cfg, searchProvider: fallback },
+        found,
+        (done) =>
+          report({
+            type: "PROGRESS",
+            phase: `Searching (${label})`,
+            done,
+            total: items.length,
+            note: `${found.size} pages found`,
+          }),
+      );
+      if (fallbackError) {
+        searchError = searchError ? `${searchError}; ${fallbackError}` : fallbackError;
+      }
+    }
+  }
 
   // --- 3. Scrape (read each page) --------------------------------------
   const targets = pickTargets([...found.values()], cfg);
@@ -119,16 +145,26 @@ async function runCrawl(text, cfg) {
   // here turns a silent "verdict built on nothing" into something the user can
   // act on. Name the half that failed — discovery (search) or reading (scrape).
   if (pages.length === 0) {
-    const provider = cfg.searchProvider === "brave" ? "Brave" : "DuckDuckGo";
-    const reason =
-      found.size === 0
-        ? `the ${provider} search returned no results`
-        : `none of the ${targets.length} result pages could be read`;
+    let reason;
+    if (found.size === 0) {
+      if (cfg.searchProvider === "brave" && !cfg.braveKey) {
+        // Selected Brave but keyed nothing: the crawler fell back to DuckDuckGo.
+        // Say that plainly rather than blaming a provider that was never used.
+        reason = "Brave is selected but no Brave API key is set";
+      } else {
+        reason = `the ${providerLabel(primary)} search returned no usable results`;
+        // The provider's own error (bad key, rate limit, block) is the useful
+        // part; without it, "no results" hides the real cause.
+        if (searchError) reason += ` — ${searchError}`;
+      }
+    } else {
+      reason = `none of the ${targets.length} result pages could be read`;
+    }
     report({
       type: "ERROR",
       message:
-        `Nothing could be captured for analysis — ${reason}. ` +
-        "Check the search provider in Settings and try again.",
+        `Nothing could be captured for analysis: ${reason}. ` +
+        "Check the search provider and API key in Settings, then try again.",
     });
     return;
   }
@@ -166,17 +202,54 @@ function pickTargets(candidates, cfg) {
 
 // ---------------------------------------------------------------- search ----
 
-async function searchWeb(query, cfg) {
-  if (cfg.searchProvider === "brave" && cfg.braveKey) {
-    return searchBrave(query, cfg);
-  }
-  return searchDuckDuckGo(query, cfg);
+/** The provider to try first: the configured one (Brave only when keyed). */
+function primaryProvider(cfg) {
+  return cfg.searchProvider === "brave" && cfg.braveKey ? "brave" : "duckduckgo";
+}
+
+/** The provider to fall back to when the first finds nothing, if one is set up. */
+function otherProvider(cfg) {
+  if (primaryProvider(cfg) === "duckduckgo") return cfg.braveKey ? "brave" : null;
+  return "duckduckgo";
+}
+
+function providerLabel(provider) {
+  return provider === "brave" ? "Brave" : "DuckDuckGo";
+}
+
+async function searchWith(provider, query, cfg) {
+  return provider === "brave" ? searchBrave(query, cfg) : searchDuckDuckGo(query, cfg);
+}
+
+/**
+ * Run every query through one provider and collect what it returns.
+ *
+ * A single blocked query must not abort the crawl, but its failure is kept so a
+ * run that found nothing can report *why* instead of guessing.
+ */
+async function searchPass(items, provider, cfg, found, onProgress) {
+  let firstError = "";
+  let done = 0;
+  await mapLimit(items, 4, async (item) => {
+    let results = [];
+    try {
+      results = await searchWith(provider, item.query, cfg);
+    } catch (err) {
+      if (!firstError) firstError = err?.message || String(err);
+    }
+    for (const r of results) {
+      if (!found.has(r.url)) found.set(r.url, { ...r, query: item.query, category: item.category });
+    }
+    done += 1;
+    onProgress(done);
+  });
+  return firstError;
 }
 
 async function searchDuckDuckGo(query, cfg) {
   const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
   const response = await fetchWithTimeout(url, { headers: { Accept: "text/html" } }, 15000);
-  if (!response.ok) throw new Error(`DuckDuckGo returned ${response.status}`);
+  if (!response.ok) throw new Error(`DuckDuckGo HTTP ${response.status}`);
   const html = await response.text();
   const doc = new DOMParser().parseFromString(html, "text/html");
 
@@ -194,17 +267,36 @@ async function searchDuckDuckGo(query, cfg) {
     });
     if (out.length >= cfg.perQuery) break;
   }
+  // An empty list here is not "no such page exists": DuckDuckGo answers
+  // automated fetches with HTTP 202 and a page carrying no result nodes. Report
+  // it as a block so it is never mistaken for a genuinely empty web.
+  if (out.length === 0) {
+    throw new Error(`DuckDuckGo returned no results (HTTP ${response.status}, likely blocked)`);
+  }
   return out;
 }
 
 async function searchBrave(query, cfg) {
   const url = `https://api.search.brave.com/res/v1/web/search?count=${cfg.perQuery}&q=${encodeURIComponent(query)}`;
-  const response = await fetchWithTimeout(
-    url,
-    { headers: { Accept: "application/json", "X-Subscription-Token": cfg.braveKey } },
-    15000,
-  );
-  if (!response.ok) throw new Error(`Brave Search returned ${response.status}`);
+  const headers = { Accept: "application/json", "X-Subscription-Token": cfg.braveKey };
+
+  // The free tier allows one request a second while the crawler fires several
+  // queries at once, so a 429 is expected rather than exceptional. Honour
+  // Retry-After when Brave sends it, and retry a couple of times.
+  let response;
+  for (let attempt = 0; ; attempt += 1) {
+    response = await fetchWithTimeout(url, { headers }, 15000);
+    if (response.status !== 429 || attempt >= 2) break;
+    const retryAfter = Number(response.headers.get("retry-after"));
+    await sleep(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1100);
+  }
+  if (!response.ok) {
+    // 401/403: the key is wrong, expired, or not on a Web Search plan.
+    // 429: the rate or monthly limit is spent. Surface it — a swallowed error
+    // here reads as "no results" and hides the cause.
+    throw new Error(`Brave Search HTTP ${response.status}${await errorHint(response)}`);
+  }
+
   const data = await response.json();
   const out = [];
   for (const r of data.web?.results || []) {
@@ -296,6 +388,20 @@ function normalize(text) {
 
 // --------------------------------------------------------------- helpers ----
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** A short `<message>` from a provider's JSON error body, when it sends one. */
+async function errorHint(response) {
+  try {
+    const match = (await response.text()).match(/"message"\s*:\s*"([^"]{0,140})"/);
+    return match ? `: ${match[1]}` : "";
+  } catch {
+    return "";
+  }
+}
+
 async function fetchWithTimeout(url, options, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -303,7 +409,10 @@ async function fetchWithTimeout(url, options, timeoutMs) {
     return await fetch(url, {
       ...options,
       signal: controller.signal,
-      credentials: "include",
+      // Never send the user's cookies to a search endpoint or a scraped site:
+      // neither needs the user's session, and sending them would leak the
+      // user's identity to every page the crawler touches.
+      credentials: "omit",
       redirect: "follow",
       cache: "no-store",
     });
