@@ -114,6 +114,10 @@ HARD_PATTERNS: frozenset[str] = frozenset(
         "repeated_payment_complaints",
         "fraud_accusations_against_company",
         "claim_contradicted_by_official_source",
+        # A checker that scores domains for fraud/phishing reports has placed
+        # this one in its flagged band: independent infrastructure evidence, not
+        # a keyword guess.
+        "security_checker_flag",
         "historical_reports",
         # Concrete scam structures that are not merely contextual.
         "unrealistic_easy_money",
@@ -302,6 +306,20 @@ def assess(
         trust_signals=trust_signals,
         insufficient=insufficient,
     )
+    # Positive identity evidence — the employer's own domain, its own mail domain,
+    # or an official page vouching for the link. None of these is the same as
+    # "no fee was demanded": that is the absence of a red flag, not evidence that
+    # an unverifiable offer is legitimate.
+    verified_identity = any(
+        signal.id
+        in {
+            "official_source_found",
+            "application_domain_matches_employer",
+            "corporate_email_matches_employer",
+            "official_link_verified",
+        }
+        for signal in trust_signals
+    )
     status = _status_for(
         patterns_by_id,
         level=level,
@@ -310,6 +328,7 @@ def assess(
         expired=deadline_info.expired,
         insufficient=insufficient,
         conflicting=conflicting,
+        verified_identity=verified_identity,
     )
     checklist = _checklist(patterns_by_id, user_input, deadline_info, trust_signals)
     summary = _summary(status, level, signals, user_input)
@@ -410,6 +429,7 @@ def _status_for(
     expired: bool,
     insufficient: bool,
     conflicting: bool,
+    verified_identity: bool = True,
 ) -> OpportunityStatus:
     """Map signals into a status, deliberately kept separate from the score.
 
@@ -431,9 +451,23 @@ def _status_for(
     if conflicting:
         return "CONFLICTING_EVIDENCE"
     domain_evidence = bool(domain and domain.company_name_match)
-    if level == "LOW" and trust_score >= 60 and domain_evidence:
+    # A company with recorded complaints about how it treats candidates cannot be
+    # called legitimate, however low the score: the score only says no *hard*
+    # fraud signal was found, not that the reports were clean. Without this a
+    # scholarship that carries real forum complaints came back as
+    # "Legitimate (verified)", contradicting the evidence listed under it.
+    complaints = bool(
+        {"negative_reputation", "fraud_accusations_against_company"} & set(present)
+    )
+    if (
+        level == "LOW"
+        and trust_score >= 60
+        and domain_evidence
+        and not complaints
+        and verified_identity
+    ):
         return "LEGITIMATE_VERIFIED"
-    if level == "LOW" and trust_score >= 30:
+    if level == "LOW" and trust_score >= 30 and not complaints and verified_identity:
         return "LIKELY_LEGITIMATE_UNVERIFIED"
     return "NEEDS_VERIFICATION"
 

@@ -47,6 +47,20 @@ export function VerdictResult({
   const risk = result.risk;
   const level = LEVEL_STYLE[risk.level] ?? LEVEL_STYLE.MODERATE;
   const coverage = result.investigation?.coverage;
+  /**
+   * A score is only meaningful when the run had something to judge. With no
+   * company-specific evidence the engine returns 0 because no rule fired — not
+   * because it checked and found nothing wrong — so it is shown as "—" and never
+   * as a green "Low risk", and the trust points awarded for the *absence* of
+   * complaints are not displayed either.
+   */
+  const undecided =
+    risk.status === "INSUFFICIENT_EVIDENCE" ||
+    risk.status === "CONFLICTING_EVIDENCE" ||
+    coverage?.sufficient === false ||
+    // Nothing fired at all: a 0 here means "no rule matched", which is not the
+    // same as "checked and found clean".
+    (risk.score === 0 && !risk.signals?.length);
   const notable = result.investigation?.notable_findings ?? [];
   const evidence = result.investigation?.evidence?.length
     ? result.investigation.evidence
@@ -60,19 +74,25 @@ export function VerdictResult({
           <div>
             <p className="eyebrow">Verdict</p>
             <div className="mt-3 flex items-baseline gap-3">
-              <span className={cx("font-display text-5xl font-semibold leading-none", level.text)}>
-                {risk.score}
+              <span
+                className={cx(
+                  "font-display text-5xl font-semibold leading-none",
+                  undecided ? "text-faint" : level.text,
+                )}
+                title={undecided ? "No company-specific evidence was found, so no score was set" : undefined}
+              >
+                {undecided ? "—" : risk.score}
               </span>
-              <span className="text-sm text-faint">/ 100</span>
+              <span className="text-sm text-faint">{undecided ? "not scored" : "/ 100"}</span>
             </div>
           </div>
           <span
             className={cx(
               "rounded-full border border-line px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide",
-              level.text,
+              undecided ? "text-muted" : level.text,
             )}
           >
-            {level.label}
+            {undecided ? "Not enough evidence" : level.label}
           </span>
         </div>
 
@@ -165,7 +185,7 @@ export function VerdictResult({
       )}
 
       {/* -------------------------------------------------------- positive side */}
-      {!!risk.trust_signals?.length && (
+      {!!risk.trust_signals?.length && !undecided && (
         <Panel title={`What it gets right (trust ${risk.trust_score}/100)`}>
           <ul className="space-y-3">
             {risk.trust_signals.map((signal: TrustSignal) => (

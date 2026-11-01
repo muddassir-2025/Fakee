@@ -20,7 +20,9 @@ from ..schemas import (
 )
 from .groq_client import groq_client
 from .text_utils import (
+    domain_mentions_company,
     domains_from_urls,
+    extract_domain,
     extract_emails,
     extract_phones,
     extract_urls,
@@ -111,6 +113,22 @@ LEGAL_SUFFIX_TOKENS = {
 # Words that can trail a cut name once its sentence was removed ("ABC
 # Technologies asked for a " + "Rs 1,500"). Only stripped *after* a boundary was
 # found, so a name that ends in one of them on its own ("Samsung Pay") is safe.
+# Words that mean a captured name has run on into the surrounding sentence
+# ("eTeam for students interested in Generative AI"). They never belong to an
+# employer's name, and the name keys the topic filter, the search queries and the
+# stored company record, so the capture is cut at the first one. Deliberately
+# excludes "of" and "&": "Bank of Baroda" and "Larsen & Toubro" are names.
+NAME_CONTINUATION_RE = re.compile(
+    r"\s+(?:for|is|are|was|were|who|that|which|available|offering|offers)\b",
+    re.IGNORECASE,
+)
+# A capture that is only one of these is not a company name at all ("We are
+# hiring…" captures "We are"), so a weaker cue is tried instead of storing junk
+# that would key every search query.
+STOPWORD_NAMES = {
+    "a", "an", "and", "dear", "here", "i", "it", "our", "students", "that",
+    "the", "there", "they", "this", "we", "you",
+}
 COMPANY_TRAILING_NOISE = {
     "a", "an", "and", "are", "ask", "asked", "asking", "at", "called",
     "contacted", "for", "from", "i", "in", "is", "it", "me", "my", "of",
@@ -126,6 +144,61 @@ LEGAL_ENTITY_RE = re.compile(
 )
 
 
+# A fee whose own value says it costs nothing is not a fee: "Registration Fee:
+# Free", "security deposit: nil", "training fee waived", "registration fee of
+# Rs 0". `has_unnegated` only sees a negation *before* the keyword, so without
+# this a genuinely free scholarship test was read as demanding an upfront payment
+# and came back as a verified-fraud verdict.
+FREE_VALUE_RE = re.compile(
+    r"^\s*(?:is|of|was)?\s*[:\-–—=]?\s*(?:₹|rs\.?|inr)?\s*(?:completely\s+)?"
+    r"(?:free|nil|zero|waived(?:\s+off)?|not\s+required|not\s+applicable|n/?a|0(?:\.0+)?)\b",
+    re.IGNORECASE,
+)
+
+
+def _mentions(text: str, keyword: str) -> bool:
+    """Whole-word mention of a money keyword.
+
+    Substring matching made the query string `?feedback=6` look like a fee, which
+    turned a free scholarship test into a demand for payment.
+    """
+    return re.search(rf"(?<!\w){re.escape(keyword)}(?!\w)", text, re.IGNORECASE) is not None
+
+
+def _states_free(text: str, keyword: str) -> bool:
+    """True when *every* mention of this money keyword states it costs nothing."""
+    occurrences = list(
+        re.finditer(rf"(?<!\w){re.escape(keyword)}(?!\w)", text, re.IGNORECASE)
+    )
+    if not occurrences:
+        return False
+    return all(
+        FREE_VALUE_RE.match(text[m.end() : m.end() + 32]) for m in occurrences
+    )
+
+
+# A domain introduced as a *partner* is neither an application link nor the
+# employer's website: "Mue AI Pvt. Ltd., in collaboration with v4c.ai" made the
+# partner's site look like a mismatched employer domain.
+PARTNER_CONTEXT_RE = re.compile(
+    r"(?:in\s+collaboration\s+with|in\s+association\s+with|in\s+partnership\s+with|"
+    r"collaboration\s+with|partner(?:ed|ing)?\s+with|powered\s+by)\s*[:\-–]?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _actionable_urls(text: str, urls: list[str]) -> list[str]:
+    """The URLs a candidate is actually meant to act on."""
+    kept: list[str] = []
+    for url in urls:
+        index = text.find(url)
+        before = text[max(0, index - 40) : index] if index != -1 else ""
+        if PARTNER_CONTEXT_RE.search(before):
+            continue
+        kept.append(url)
+    return kept
+
+
 def _trim_company_name(value: str) -> str:
     """Cut a captured company value at the first field or sentence boundary.
 
@@ -136,6 +209,9 @@ def _trim_company_name(value: str) -> str:
     company record, so it has to be the name and nothing else.
     """
     match = COMPANY_NAME_BOUNDARY_RE.search(value)
+    continuation = NAME_CONTINUATION_RE.search(value)
+    if continuation and (match is None or continuation.start() < match.start()):
+        match = continuation
     if not match:
         return value.strip(" \t-–—,;:|")
 
@@ -151,10 +227,20 @@ def _trim_company_name(value: str) -> str:
     return " ".join(words).strip(" \t-–—,;:|")
 
 
+def _usable_company_name(name: str | None) -> bool:
+    """Reject a capture that cannot be a company name (empty, too short, pronoun)."""
+    value = (name or "").strip()
+    if len(value) < 2:
+        return False
+    return value.lower().strip(".,") not in STOPWORD_NAMES
+
+
 def _find_company_name(text: str) -> str | None:
     match = COMPANY_LINE_RE.search(text)
     if match:
-        return _trim_company_name(match.group(1).strip().splitlines()[0])[:120]
+        name = _trim_company_name(match.group(1).strip().splitlines()[0])[:120]
+        if _usable_company_name(name):
+            return name
 
     # A legal-entity suffix on the first line is a strong company-name cue
     # (e.g. "Levroxen LLC - Online Assessment Registration").
@@ -163,14 +249,31 @@ def _find_company_name(text: str) -> str | None:
         return legal.group(1).strip()[:120]
 
     # "HCLTech Hiring", "ADP – GPT Intern", "Company - Feuji"
-    for pattern in (
-        r"^([A-Z][\w&.,' -]{2,40})\s+(?:hiring|is hiring|recruitment)",
-        r"\bwith\s+([A-Z][\w&.,' -]{2,40})",
-        r"Company\s*[-–:]\s*([^\n]+)",
+    #
+    # Each cue carries its own flags: `[A-Z]` is only meaningful case-sensitively.
+    # Compiled with IGNORECASE it matched ordinary words, and
+    # "…role with an international client" stored "an international client" as the
+    # employer — which then keyed every search query.
+    for pattern, flags in (
+        (r"^([A-Z][\w&.,' -]{2,40})\s+(?i:hiring|is hiring|recruitment)", re.MULTILINE),
+        # "…available with eTeam for students…": only the capitalised tokens are
+        # the name, so the capture stops at the first lowercase word instead of
+        # swallowing the rest of the sentence (up to four tokens, for
+        # "ABC Technologies Pvt Ltd").
+        (r"\b(?i:with)\s+((?:[A-Z][\w&.'\-]*)(?:\s+[A-Z][\w&.'\-]*){0,3})", 0),
+        # "QuickHyre AI is inviting applications", "WeMakeScholars is organizing"
+        (
+            r"\b((?:[A-Z][\w&.'\-]*)(?:\s+[A-Z][\w&.'\-]*){0,3})\s+"
+            r"(?i:is)\s+(?i:inviting|organi[sz]ing|conducting|offering)\b",
+            0,
+        ),
+        (r"(?i:Company)\s*[-–:]\s*([^\n]+)", 0),
     ):
-        m = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+        m = re.search(pattern, text, flags)
         if m:
-            return _trim_company_name(m.group(1).strip())[:120]
+            name = _trim_company_name(m.group(1).strip())[:120]
+            if _usable_company_name(name):
+                return name
     return None
 
 
@@ -212,7 +315,7 @@ def _find_location(text: str) -> str | None:
 def heuristic_extract(text: str) -> UserInput:
     """Deterministic fallback extraction — no external calls."""
     lower = text.lower()
-    urls = extract_urls(text)
+    urls = _actionable_urls(text, extract_urls(text))
     emails = extract_emails(text)
     phones = extract_phones(text)
     domains = domains_from_urls(urls)
@@ -230,12 +333,18 @@ def heuristic_extract(text: str) -> UserInput:
     money_amount: str | None = None
     money_reason: str | None = None
     money_detected = False
-    # Negation-aware: "No registration fee" must NOT be read as a fee request.
+    # Negation-aware: "No registration fee" must NOT be read as a fee request,
+    # and neither must "Registration Fee: Free" (see `_states_free`).
     for kw in MONEY_KEYWORDS:
-        if has_unnegated(lower, [kw]):
-            money_detected = True
-            money_reason = kw.strip()
-            break
+        if not _mentions(text, kw):
+            continue
+        if not has_unnegated(lower, [kw]):
+            continue
+        if _states_free(text, kw):
+            continue
+        money_detected = True
+        money_reason = kw.strip()
+        break
     amount_match = re.search(
         r"(?:₹|rs\.?|inr)\s?[\d,]+(?:\.\d+)?", text, re.IGNORECASE
     )
@@ -255,10 +364,24 @@ def heuristic_extract(text: str) -> UserInput:
 
     opp_type = "internship" if "intern" in lower else ("job" if "job" in lower or "hiring" in lower else "unknown")
 
+    company_name = _find_company_name(text)
+    # The employer's own site, not just the first URL in the text. When no link
+    # plausibly belongs to the named employer, the website stays unknown — which
+    # is the honest answer, and stops a partner's domain being scored as a
+    # mismatch. Without a company name the domain is the only subject there is.
+    website = next(
+        (
+            url
+            for url in urls
+            if company_name and domain_mentions_company(extract_domain(url), company_name)
+        ),
+        None if company_name else (urls[0] if urls else None),
+    )
+
     return UserInput(
         company=CompanyInfo(
-            name=_find_company_name(text),
-            website=urls[0] if urls else None,
+            name=company_name,
+            website=website,
             claimed_location=_find_location(text),
         ),
         opportunity=OpportunityInfo(

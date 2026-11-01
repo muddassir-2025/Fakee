@@ -7,18 +7,29 @@
 import { accessToken } from "./auth";
 
 /**
- * The deployment's API origin, used by a build that sets no `VITE_API_BASE`.
+ * The deployment's API base, used when `VITE_API_BASE` is not set.
  *
- * The site is a static bundle (Vercel), so "same origin" cannot serve `/api` and
- * would 404 every call. The backend is a fixed Render service, so it is the
- * default. Development keeps the empty base, which the Vite proxy handles.
+ * A static build cannot serve `/api` from its own origin, so the fixed Render
+ * service is the default. The value is accepted in either form —
+ * `https://host` or the extension-style `https://host/api` — because every path
+ * below already starts with `/api`. Development keeps the empty base, which the
+ * Vite proxy handles.
  */
-const DEFAULT_API_ORIGIN = "https://fakee-pa1j.onrender.com";
+const DEFAULT_API_BASE = "https://fakee-pa1j.onrender.com/api";
 
-const API_BASE = (
-  (import.meta.env.VITE_API_BASE as string | undefined)?.trim() ||
-  (import.meta.env.DEV ? "" : DEFAULT_API_ORIGIN)
-).replace(/\/+$/, "");
+function normalizeApiBase(value: string): string {
+  return value
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/api$/i, "")
+    .replace(/\/+$/, "");
+}
+
+const configuredApiBase = ((import.meta.env.VITE_API_BASE as string | undefined) ?? "").trim();
+
+const API_BASE = normalizeApiBase(
+  configuredApiBase || (import.meta.env.DEV ? "" : DEFAULT_API_BASE),
+);
 
 export type ReportStatus = "pending" | "approved" | "rejected" | "withdrawn";
 

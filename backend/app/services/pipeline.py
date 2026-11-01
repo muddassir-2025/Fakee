@@ -298,6 +298,9 @@ async def run_investigation(
         reviews,
         historical_reports=historical,
         sources_checked=reviews.total_mentions,
+        # The captured pages, so the rules can use what independent checkers and
+        # the programme's own terms page actually said (see ``patterns``).
+        pages=bundle.results,
     )
     timer.mark("pattern_detection", "ok", f"{len(patterns)} patterns detected", t)
 

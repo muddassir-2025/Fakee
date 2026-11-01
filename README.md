@@ -73,7 +73,7 @@ reproducible rule engine — not decided arbitrarily by an LLM.
 | Exa search/content        | `services/exa.py` (free tier)                                              |
 | Categorized query builder | `services/query_builder.py`                                                |
 | Domain verification       | `services/domain_check.py` (RDAP + DNS + HTTPS + redirect + name match)    |
-| Scam-pattern engine       | `services/patterns.py` (29 patterns across money/channel/PII/opportunity/domain/reputation/history) |
+| Scam-pattern engine       | `services/patterns.py` (31 patterns across money/channel/PII/opportunity/domain/reputation/history) |
 | Risk engine               | `services/risk.py` (severity weights + co-occurrence amplifiers)           |
 | Intelligence database     | `models.py` (companies, opportunities, domains, investigations, patterns, evidence, risk, reports) |
 | Orchestration             | `services/pipeline.py`                                                     |

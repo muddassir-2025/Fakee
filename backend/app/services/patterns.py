@@ -13,8 +13,12 @@ Detecting *patterns of signals* rather than single keywords is the core idea.
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
 from ..schemas import DetectedPattern, DomainIntel, ReviewSignals, UserInput
+
+if TYPE_CHECKING:  # pragma: no cover - typing only, avoids an import cycle
+    from .exa import SearchResult
 from .text_utils import domain_mentions_company, extract_domain, has_unnegated
 
 # --------------------------------------------------------------------------
@@ -200,6 +204,26 @@ PATTERN_CATALOG: dict[str, dict[str, str]] = {
         "severity": "low",
         "description": "Several sources describe recruitment via WhatsApp/Telegram.",
     },
+    "security_checker_flag": {
+        "label": "Flagged by a website-safety checker",
+        "category": "reputation",
+        "severity": "high",
+        "description": (
+            "An independent checker that scores domains for fraud/phishing reports "
+            "places this site in its flagged band, or states outright that it looks "
+            "like a scam."
+        ),
+    },
+    "offer_tied_to_paid_service": {
+        "label": "Benefit conditional on using their service",
+        "category": "opportunity",
+        "severity": "medium",
+        "description": (
+            "The posted benefit (scholarship, waiver, reward) is available only to "
+            "people who buy through the sender — a sales route dressed as a merit "
+            "award, not a fraud in itself."
+        ),
+    },
     "historical_reports": {
         "label": "Previously reported to this platform",
         "category": "history",
@@ -305,6 +329,78 @@ RESHIPPING_TERMS = (
 NO_INTERVIEW_TERMS = {"without interview", "no interview", "direct joining", "no technical"}
 GUARANTEE_TERMS = {"guaranteed", "100% placement", "assured", "confirmed selection"}
 
+# --------------------------------------------------------------- checkers ---
+# Independent website-safety checkers publish a verdict per domain. Their pages
+# are worth reading but easy to mis-read: almost every title contains the word
+# "scam" ("… Reviews | scam, legit or safe check"), so matching the word would
+# flag every company that has ever been listed. Only the *verdict* counts — an
+# explicit scam/phishing finding, or a trust score in the bottom band.
+CHECKER_DOMAINS = frozenset(
+    {
+        "scamadviser.com", "scam-detector.com", "gridinsoft.com", "urlvoid.com",
+        "scamvoid.com", "webutation.net", "sitejabber.com", "trustpilot.com",
+    }
+)
+# Scamadviser's 48/100 reads as "average to good", so the cut-off has to sit in
+# the checkers' own "likely a scam" band or a merely mediocre site gets a high
+# severity fraud signal.
+CHECKER_FLAG_SCORE = 30
+CHECKER_VERDICT_RE = re.compile(
+    r"(?:might|may|appears?\s+to)\s+be\s+a\s+scam"
+    r"|\b(?:likely|probably|definitely)\s+a\s+scam"
+    r"|\b(?:is|was)\s+an?\s+(?:scam|fraudulent\s+site)"
+    r"|\bphishing\b"
+    # Scam Detector's own wording for a negative finding: "we raised the alert on
+    # <domain>". A positive page says "the connection is valid" instead.
+    r"|\b(?:raised|raise[sd]?)\s+(?:the\s+|an?\s+)?alert\b"
+    r"|\b(?:is|was|has\s+been)\s+flagged\b"
+    r"|\bhigh[\s-]risk\s+(?:website|domain|financial)"
+    r"|\bnot\s+safe\s+to\s+(?:use|buy|shop|visit)",
+    re.IGNORECASE,
+)
+# Independent pages that call the company itself a scam. A question ("Is X a
+# scam?") is not an accusation, so the match is rejected when it is followed by
+# a question mark; checkers and the company's own site are excluded, because both
+# have their own verdict.
+ACCUSATION_RE = re.compile(
+    r"\b(?:is|was|are|were)\s+(?:a\s+)?(?:a\s+)?(?:big\s+|total\s+|complete\s+|pure\s+|huge\s+)?"
+    r"(?:scam|fraud|fraudulent)\b"
+    r"|\b(?:a|another)\s+(?:big\s+|total\s+|complete\s+|pure\s+)?scam\b"
+    r"|\bscam(?:med|ming)?\s+(?:students|candidates|people|applicants|me|us)\b"
+    r"|\b(?:cheated|defrauded)\s+(?:students|candidates|people|applicants|me|us)\b",
+    re.IGNORECASE,
+)
+CHECKER_SCORE_RE = re.compile(r"trust\s*(?:score|rating)[^.\n\d]{0,20}(\d{1,3})", re.IGNORECASE)
+
+# A benefit that is conditional on buying through the sender. The posting
+# advertises an award; the page that describes its terms says it is only for
+# customers of the sender's own service — a sales funnel, which is legitimate to
+# point out but not proof of fraud, so it carries a medium weight.
+BENEFIT_TERMS = (
+    "scholarship", "discount", "waiver", "cashback", "reward", "prize",
+    "benefit", "eligib",
+)
+SERVICE_TERMS = (
+    "loan", "subscription", "insurance", "booking", "purchase", "membership",
+    "plan", "course", "policy", "account", "service",
+)
+OFFER_TIE_RES = (
+    re.compile(r"only\s+[^.\n]{0,80}\b(?:via|through|with|using)\b", re.IGNORECASE),
+    re.compile(r"eligible\s+only\s+(?:if|when|for)\b[^.\n]{0,80}", re.IGNORECASE),
+    re.compile(
+        r"\b(?:mandatory|required|compulsory)\b[^.\n]{0,40}"
+        r"\b(?:take|apply|process|book|purchase|subscribe|pay)\b[^.\n]{0,60}"
+        r"\b(?:via|through|with|using)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:must|only\s+those\s+who)\b[^.\n]{0,40}"
+        r"\b(?:take|applied|apply|process|book|purchase|subscribe)\b[^.\n]{0,60}"
+        r"\b(?:via|through|with|using)\b",
+        re.IGNORECASE,
+    ),
+)
+
 
 def _blob(user_input: UserInput) -> str:
     parts = [
@@ -355,6 +451,110 @@ def is_unusually_high(user_input: UserInput) -> tuple[bool, str]:
     return False, ""
 
 
+def _page_text(result: SearchResult) -> str:
+    return f"{result.title or ''}. {result.snippet or ''}"
+
+
+def _is_checker(domain: str) -> bool:
+    return any(domain == c or domain.endswith("." + c) for c in CHECKER_DOMAINS)
+
+
+def _company_key(value: str) -> str:
+    """Letters only, lowercased: "WeMakeScholars" ≈ "We make scholar".
+
+    Complaint threads spell the name the way the poster did, so an exact string
+    match misses the page that matters most ("We make scholar - a big scam").
+    """
+    return re.sub(r"[^a-z0-9]", "", (value or "").lower())
+
+
+def _mentions_company(text: str, company: str) -> bool:
+    key = _company_key(company)
+    return not key or key in _company_key(text)
+
+
+def _checker_flags(pages: list[SearchResult] | None) -> list[str]:
+    """What independent website-safety checkers said about the domain."""
+    hits: list[str] = []
+    for result in pages or []:
+        domain = extract_domain(result.url)
+        if not _is_checker(domain):
+            continue
+        text = _page_text(result)
+        verdict = CHECKER_VERDICT_RE.search(text)
+        if verdict:
+            # "very likely not a scam but legit" is the checker clearing the site.
+            if "not " in text[max(0, verdict.start() - 12) : verdict.start()].lower():
+                continue
+            hits.append(f"{domain}: “{verdict.group(0)}”")
+            continue
+        for score in CHECKER_SCORE_RE.findall(text):
+            if int(score) <= CHECKER_FLAG_SCORE:
+                hits.append(f"{domain}: trust score {score}/100")
+                break
+        if len(hits) >= 3:
+            break
+    return hits[:3]
+
+
+def _corpus_accusations(
+    pages: list[SearchResult] | None, company: str
+) -> list[tuple[str, str]]:
+    """Independent pages that call the company itself a scam, as (domain, quote)."""
+    hits: list[tuple[str, str]] = []
+    key = _company_key(company)
+    for result in pages or []:
+        domain = extract_domain(result.url)
+        # Checkers have their own verdict, and a company's own site is not an
+        # independent accuser.
+        if _is_checker(domain) or (key and _company_key(domain) == key):
+            continue
+        text = _page_text(result)
+        if not _mentions_company(text, company):
+            continue
+        for match in ACCUSATION_RE.finditer(text):
+            after = text[match.end() : match.end() + 3].lstrip()
+            if after.startswith("?"):
+                continue
+            # The company has to be the *subject* of the accusing sentence. A
+            # generic fraud-advice article mentions a brand without accusing it
+            # ("scammers impersonate Infosys"), and a government page listing
+            # scam types is not an accusation against every company it names.
+            start = max(
+                0,
+                text.rfind(".", 0, match.start()) + 1,
+                text.rfind("\n", 0, match.start()) + 1,
+            )
+            if not _mentions_company(text[start : match.start()], company):
+                continue
+            sentence = text[start : match.end() + 80].strip()
+            hits.append((domain, sentence[:220]))
+            break
+    return hits[:4]
+
+
+def _offer_ties(pages: list[SearchResult] | None, company: str) -> list[str]:
+    """Sentences saying the benefit is only for customers of the sender."""
+    hits: list[str] = []
+    for result in pages or []:
+        text = _page_text(result)
+        # The page has to be about this company for its terms to be its terms.
+        if not _mentions_company(text, company):
+            continue
+        for sentence in re.split(r"(?<=[.!?])\s+|\n+", text):
+            low = sentence.lower()
+            if not any(t in low for t in BENEFIT_TERMS):
+                continue
+            if not any(t in low for t in SERVICE_TERMS):
+                continue
+            if any(pattern.search(sentence) for pattern in OFFER_TIE_RES):
+                hits.append(sentence.strip()[:220])
+                break
+        if len(hits) >= 2:
+            break
+    return hits[:2]
+
+
 # --------------------------------------------------------------------------
 # Engine
 # --------------------------------------------------------------------------
@@ -365,6 +565,7 @@ def detect_patterns(
     *,
     historical_reports: int = 0,
     sources_checked: int = 0,
+    pages: list[SearchResult] | None = None,
 ) -> list[DetectedPattern]:
     blob = _blob(user_input)
     claims_low = " ".join(user_input.claims).lower()
@@ -581,6 +782,59 @@ def detect_patterns(
         )
     )
 
+    # ---- what the captured pages themselves say ----
+    # Both of these are read off pages this run actually fetched, so they cite a
+    # source the user can open rather than an inference about the posting.
+    checker_hits = _checker_flags(pages)
+    emit(
+        _p(
+            "security_checker_flag",
+            bool(checker_hits),
+            0.85,
+            "An independent website-safety checker flags this domain as a scam or "
+            "phishing risk.",
+            checker_hits,
+        )
+    )
+    tie_hits = _offer_ties(pages, user_input.company.name or "")
+    emit(
+        _p(
+            "offer_tied_to_paid_service",
+            bool(tie_hits),
+            0.75,
+            "The published terms make the benefit conditional on buying through the "
+            "sender, so the award is a route to their paid service.",
+            tie_hits,
+        )
+    )
+    corpus_acc = _corpus_accusations(pages, user_input.company.name or "")
+    accuser_domains = {domain for domain, _ in corpus_acc}
+    # One site alleging fraud is a caution. It is corroboration — which an
+    # accusation signal is allowed to rest on — when a second independent site
+    # says the same, or when the complaint volume independently confirms people
+    # are reporting about this company.
+    accusation_corroborated = (
+        len(accuser_domains) >= 2 or reviews.negative_mentions >= MIN_NEGATIVE_MENTIONS
+    )
+    emit(
+        _p(
+            "fraud_accusations_against_company",
+            bool(corpus_acc),
+            0.8 if accusation_corroborated else 0.7,
+            (
+                f"{len(accuser_domains)} independent source(s) call this company a scam "
+                f"or accuse it of defrauding candidates"
+                + (
+                    f", corroborated by {reviews.negative_mentions} negative mentions."
+                    if accusation_corroborated and reviews.negative_mentions
+                    else "."
+                )
+            ),
+            [quote for _, quote in corpus_acc],
+            severity="high" if accusation_corroborated else "medium",
+        )
+    )
+
     # ---- domain ----
     if domain.domain:
         if domain.age_days is not None and domain.age_days < 180:
@@ -635,7 +889,9 @@ def detect_patterns(
         )
     )
     neg_signal = _negative_reputation_signal(reviews)
-    if neg_signal is not None:
+    # The corpus accusations above already cite these same pages, so scoring them
+    # again as generic dissatisfaction would count one body of reports twice.
+    if neg_signal is not None and not corpus_acc:
         severity, confidence = neg_signal
         emit(
             _p(

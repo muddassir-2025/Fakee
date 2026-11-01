@@ -66,8 +66,25 @@ export async function signInWithGoogle(): Promise<void> {
   if (!authClient) throw new Error("Sign-in is not configured for this deployment.");
   const callbackURL = window.location.href;
   const result = await authClient.signIn.social({ provider: "google", callbackURL });
-  const error = (result as { error?: { message?: string } } | null)?.error;
-  if (error) throw new Error(error.message || "Could not start Google sign-in.");
+  const error = (result as { error?: { message?: string; status?: number } } | null)?.error;
+  if (error) throw signInFailure(error);
+}
+
+/**
+ * Turn a sign-in failure into something actionable.
+ *
+ * Neon Auth answers 403 when the page's origin is not on the project's trusted
+ * domains list — a deployment setting the user cannot read out of "HTTP 403".
+ */
+function signInFailure(error: { message?: string; status?: number }): Error {
+  const message = error.message ?? "";
+  if (error.status === 403 || /\b403\b/.test(message)) {
+    return new Error(
+      "Sign-in was refused for this site's address (HTTP 403). Add this site's origin to the " +
+        "Neon Auth trusted domains, then try again.",
+    );
+  }
+  return new Error(message || "Could not start Google sign-in.");
 }
 
 export async function signOutNow(): Promise<void> {

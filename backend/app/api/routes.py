@@ -68,6 +68,10 @@ router = APIRouter()
 
 
 def _base_health() -> dict:
+    # "Mock mode" means an investigation would fall back to the labelled demo
+    # search. Brave (the site's own key) and Exa are both real search engines, so
+    # either one takes a run out of mock; without one the demo data is used.
+    has_search = settings.brave_enabled or settings.exa_live
     return {
         "service": settings.app_name,
         "environment": settings.environment,
@@ -80,7 +84,7 @@ def _base_health() -> dict:
             "exa": settings.exa_live,
             "database": "sqlite" if settings.is_sqlite else "postgresql",
         },
-        "mock_mode": not (settings.groq_enabled and settings.exa_live),
+        "mock_mode": not (settings.groq_enabled and has_search),
     }
 
 

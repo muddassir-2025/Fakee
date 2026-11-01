@@ -148,7 +148,7 @@ export const STEPS: Step[] = [
     n: "05",
     title: "Applies the pattern rules",
     body: "A deterministic engine looks for dangerous combinations, not single keywords: a fee plus a WhatsApp-only process plus a brand-new domain is a different thing from any one of them alone.",
-    note: "29 patterns across money, channel, data, domain",
+    note: "31 patterns across money, channel, data, domain",
   },
   {
     n: "06",

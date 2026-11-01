@@ -6,6 +6,8 @@ covers existence, reputation, complaints, and the specific suspicious claims.
 
 from __future__ import annotations
 
+import re
+
 from ..config import settings
 from ..schemas import SearchQueryGroup, UserInput
 from .patterns import GUARANTEE_TERMS, MONEY_REASONS, NO_INTERVIEW_TERMS, REWARD_TERMS
@@ -22,6 +24,12 @@ from .text_utils import has_unnegated
 # mention the employer, which then come back as the investigation's sources.
 CLAIM_MECHANISM_TERMS: tuple[str, ...] = tuple(
     sorted(MONEY_REASONS | NO_INTERVIEW_TERMS | GUARANTEE_TERMS | REWARD_TERMS)
+)
+
+# A posting that offers one of these is advertising a benefit rather than a plain
+# job, so its published terms are worth a search (see `programme_terms`).
+ADVERTISED_BENEFIT_TERMS = (
+    "scholarship", "fee waiver", "discount", "cashback", "reward", "prize",
 )
 
 
@@ -97,6 +105,25 @@ def build_queries(user_input: UserInput) -> list[SearchQueryGroup]:
         ],
     )
 
+    # A posting that advertises a *benefit* — a scholarship, waiver, cashback — is
+    # worth exactly one query about its published terms. That is where a "only if
+    # you buy through us" condition lives, and it changes what the offer is: a
+    # merit award, or a route into the sender's paid service. Plain job postings
+    # skip it, so the query budget is not spent on "eligibility" boilerplate.
+    if name and any(term in user_input.raw_text.lower() for term in ADVERTISED_BENEFIT_TERMS):
+        programme = _programme_token(user_input.raw_text)
+        add(
+            "programme_terms",
+            [
+                f'"{name}" {programme} eligibility' if programme else "",
+                # The programme's own site states its terms, including conditions
+                # like "only if the loan is processed through us" — the page that
+                # decides whether the award is a merit benefit or a sales route.
+                f"site:{domain} {programme}" if domain and programme else "",
+                f'"{name}" eligibility conditions',
+            ],
+        )
+
     # Claim-specific queries, kept to the strongest few to stay within budget.
     #
     # Each one searches for the *mechanic* the claim asserts rather than the
@@ -119,6 +146,26 @@ def build_queries(user_input: UserInput) -> list[SearchQueryGroup]:
     add("specific_claims", claim_queries)
 
     return _limit_groups(groups, settings.max_search_queries)
+
+
+PROGRAMME_NOISE = {
+    "AI", "CEO", "CGPA", "CV", "HR", "ID", "KYC", "LPA", "ML", "NOC", "PAN",
+    "PDF", "SMS", "GST", "UPI",
+}
+
+
+def _programme_token(text: str) -> str:
+    """The named programme in the posting ("HEST 2026", "GATE 2026").
+
+    A programme's terms page names the programme ("eligibility for HEST was made
+    mandatory…"), so a query carrying that name reaches the page stating the terms
+    instead of generic eligibility boilerplate.
+    """
+    for token in re.findall(r"\b[A-Z]{3,8}\b", text):
+        if token in PROGRAMME_NOISE:
+            continue
+        return token
+    return ""
 
 
 def _claim_mechanisms(claim: str) -> list[str]:
