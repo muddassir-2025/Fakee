@@ -96,11 +96,31 @@ class Settings(BaseSettings):
     # survives. Raise this if you are on a paid tier with a higher TPM.
     groq_evidence_max_chars: int = 8000
 
-    # --- Exa (optional server-side web search) ---
-    # Exa is NOT used by default. The browser extension performs the search and
-    # page reads itself, so the product works with no search API at all. Set
-    # EXA_ENABLED=true (and supply a key) only to enable the server-side
-    # /investigate path. The code is kept for that case; nothing depends on it.
+    # --- Brave Search (the deployment's own search engine) ---
+    # The site's own key: every check made on the website searches with it, so a
+    # visitor needs no key of their own. The extension may still send a
+    # per-request user key (BYOK), which always wins over this one. Either way the
+    # key is used for one request only and is never stored, logged or returned.
+    # Without it the website's check panel points the user at the extension.
+    brave_api_key: str | None = None
+    brave_base_url: str = "https://api.search.brave.com"
+    brave_timeout_seconds: float = 20.0
+    brave_max_retries: int = 3
+    brave_backoff_base_seconds: float = 1.0
+    # Parallel in-flight Brave queries (the free tier allows ~1 request/sec, so
+    # this is deliberately small; a 429 is retried honouring Retry-After).
+    brave_max_concurrency: int = 3
+    brave_results_per_query: int = 6
+    # Server-side page enrichment: read the top results for signal sentences.
+    # Fetches go through the SSRF-safe fetcher (see services/safe_fetch.py).
+    brave_fetch_pages: bool = True
+    brave_fetch_max_pages: int = 5
+    brave_fetch_max_chars: int = 6000
+    brave_fetch_timeout_seconds: float = 12.0
+
+    # --- Exa (optional alternative server-side web search) ---
+    # A developer-owned search provider. Off by default; kept for operators who
+    # prefer it, but the user-keyed Brave path is the product's shared engine.
     exa_enabled: bool = False
     exa_api_key: str | None = None
     exa_base_url: str = "https://api.exa.ai"
@@ -174,6 +194,11 @@ class Settings(BaseSettings):
     @property
     def groq_enabled(self) -> bool:
         return bool(self.groq_api_key)
+
+    @property
+    def brave_enabled(self) -> bool:
+        """True when the deployment can search on its own (the website's path)."""
+        return bool((self.brave_api_key or "").strip())
 
     @property
     def exa_live(self) -> bool:

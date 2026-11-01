@@ -13,11 +13,13 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .api.routes import also_answer_head, probe_router, router
 from .config import settings
 from .db import engine, init_db
+from .logging_utils import install_log_redaction
 from .middleware import (
     BodySizeLimitMiddleware,
     RequestContextMiddleware,
     SecurityHeadersMiddleware,
 )
+from .services.brave import brave_client
 from .services.exa import exa_client
 from .services.groq_client import groq_client
 
@@ -25,6 +27,7 @@ logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
     format="%(asctime)s %(levelname)s %(name)s :: %(message)s",
 )
+install_log_redaction()
 logger = logging.getLogger("app")
 
 
@@ -49,6 +52,7 @@ async def lifespan(app: FastAPI):
     finally:
         await groq_client.aclose()
         await exa_client.aclose()
+        await brave_client.aclose()
         await engine.dispose()
 
 

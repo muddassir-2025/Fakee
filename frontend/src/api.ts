@@ -1,13 +1,24 @@
 /**
- * Typed client for the Fakee API (profile + admin + reporting).
+ * Typed client for the Fakee API (investigation + profile + admin + reporting).
  *
  * The site talks to the backend directly; in development Vite proxies `/api` to
- * the local server, and in a deployment `VITE_API_BASE` points at the API origin
- * (add that origin to the backend's CORS_ORIGINS).
+ * the local server, and a build uses `VITE_API_BASE` when it is set.
  */
 import { accessToken } from "./auth";
 
-const API_BASE = ((import.meta.env.VITE_API_BASE as string | undefined) ?? "").replace(/\/+$/, "");
+/**
+ * The deployment's API origin, used by a build that sets no `VITE_API_BASE`.
+ *
+ * The site is a static bundle (Vercel), so "same origin" cannot serve `/api` and
+ * would 404 every call. The backend is a fixed Render service, so it is the
+ * default. Development keeps the empty base, which the Vite proxy handles.
+ */
+const DEFAULT_API_ORIGIN = "https://fakee-pa1j.onrender.com";
+
+const API_BASE = (
+  (import.meta.env.VITE_API_BASE as string | undefined)?.trim() ||
+  (import.meta.env.DEV ? "" : DEFAULT_API_ORIGIN)
+).replace(/\/+$/, "");
 
 export type ReportStatus = "pending" | "approved" | "rejected" | "withdrawn";
 
@@ -73,11 +84,17 @@ export class ApiError extends Error {
   status: number;
   /** True when the caller should be asked to sign in (or sign in again). */
   needsSignIn: boolean;
+  /**
+   * The provider-failure label the API sent, when it sent one: `missing_key`,
+   * `invalid_key`, `quota_exhausted`, `rate_limited`, `network_error`.
+   */
+  kind: string;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, kind = "") {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.kind = kind;
     this.needsSignIn = status === 401;
   }
 }
@@ -124,9 +141,19 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   if (!response.ok) {
     const detail = (payload as { detail?: unknown } | null)?.detail;
+    // A provider/search failure is returned as a structured detail object so the
+    // client can distinguish an invalid key from an exhausted quota. Never echo
+    // the detail object itself (it must not carry a credential), only its text.
+    const objectDetail =
+      detail && typeof detail === "object"
+        ? (detail as { message?: unknown; kind?: unknown })
+        : null;
+    const nested = objectDetail ? String(objectDetail.message ?? "") : "";
+    const kind = objectDetail && objectDetail.kind ? String(objectDetail.kind) : "";
     throw new ApiError(
       response.status,
-      typeof detail === "string" ? detail : `Request failed (${response.status}).`,
+      typeof detail === "string" ? detail : nested || `Request failed (${response.status}).`,
+      kind,
     );
   }
   return payload as T;
@@ -187,6 +214,8 @@ export function fetchAdminReports(params: {
   search.set("offset", String(params.offset ?? 0));
   return apiRequest<AdminReports>(`/api/admin/reports?${search}`, { auth: true });
 }
+
+// ----------------------------------------------------- investigation/search ---
 
 export function reviewReport(
   id: string,

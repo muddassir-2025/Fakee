@@ -26,6 +26,7 @@ import re
 import sys
 import zipfile
 from pathlib import Path
+from urllib.parse import urlsplit
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXT_DIR = REPO_ROOT / "extension"
@@ -57,6 +58,19 @@ PATCH_PATTERNS: dict[str, dict[str, re.Pattern[str]]] = {
         "site URL": re.compile(r'(siteUrl:\s*)"http://localhost:5173"'),
     },
 }
+
+
+def normalize_api_base(value: str) -> str:
+    """Add the `/api` prefix the backend mounts when no path was given.
+
+    `--api-base https://your-backend.onrender.com` is the natural thing to type,
+    but every route lives under `/api`; baking the bare origin into a store
+    build would make every request 404. An explicit path is left untouched.
+    """
+    base = value.rstrip("/")
+    if urlsplit(base).path in ("", "/"):
+        return f"{base}/api"
+    return base
 
 
 def fail(message: str) -> None:
@@ -230,7 +244,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    api_base = args.api_base.rstrip("/") if args.api_base else None
+    api_base = normalize_api_base(args.api_base) if args.api_base else None
     site_url = args.site_url.rstrip("/") if args.site_url else None
     for flag, value in (("--api-base", api_base), ("--site-url", site_url)):
         if value and not re.match(r"^https?://", value):

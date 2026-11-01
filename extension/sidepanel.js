@@ -99,6 +99,28 @@ els.theme.addEventListener("click", () => {
 });
 
 // --------------------------------------------------------------- settings ---
+
+/**
+ * Normalize a backend base URL.
+ *
+ * The API is mounted under `/api`, but the value people paste is usually the
+ * bare origin (`https://your-backend.onrender.com`). Sent as-is, every request
+ * would go to `/queries`, `/reports`, … and the API would answer 404. So a URL
+ * with no path gets `/api` appended; an explicit path (including `/api`) is
+ * left exactly as the user wrote it.
+ */
+function normalizeApiBase(value) {
+  const base = String(value ?? "").trim().replace(/\/+$/, "");
+  if (!base) return DEFAULT_SETTINGS.apiBase;
+  try {
+    const { pathname } = new URL(base);
+    if (pathname === "" || pathname === "/") return `${base}/api`;
+  } catch {
+    /* Not an absolute URL: keep it as typed so the error can name it. */
+  }
+  return base;
+}
+
 async function loadSettings() {
   const stored = await chrome.storage.local.get([
     "apiBase",
@@ -112,6 +134,7 @@ async function loadSettings() {
     SESSION_KEY,
   ]);
   settings = { ...DEFAULT_SETTINGS, ...stored };
+  settings.apiBase = normalizeApiBase(settings.apiBase);
   session = readStoredSession(stored[SESSION_KEY]);
   els.apiBase.value = settings.apiBase;
   els.siteUrl.value = settings.siteUrl;
@@ -125,8 +148,12 @@ async function loadSettings() {
 }
 
 function readSettingsFromForm() {
+  // Show the normalized base back to the user, so what the panel displays is
+  // exactly what the run will call.
+  const apiBase = normalizeApiBase(els.apiBase.value);
+  els.apiBase.value = apiBase;
   settings = {
-    apiBase: els.apiBase.value.trim().replace(/\/+$/, "") || DEFAULT_SETTINGS.apiBase,
+    apiBase,
     siteUrl: els.siteUrl.value.trim().replace(/\/+$/, "") || DEFAULT_SETTINGS.siteUrl,
     searchProvider: els.provider.value,
     braveKey: els.braveKey.value.trim(),

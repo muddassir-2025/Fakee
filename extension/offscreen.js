@@ -24,6 +24,25 @@ const DEFAULT_SETTINGS = {
   maxPerDomain: 3,
 };
 
+/**
+ * Normalize a backend base URL.
+ *
+ * The API lives under `/api`, but callers paste the bare origin (or a page
+ * driving a run sends one). A pathless base would produce `/queries`, which the
+ * API answers with 404, so `/api` is appended when no path is given.
+ */
+function normalizeApiBase(value) {
+  const base = String(value ?? "").trim().replace(/\/+$/, "");
+  if (!base) return DEFAULT_SETTINGS.apiBase;
+  try {
+    const { pathname } = new URL(base);
+    if (pathname === "" || pathname === "/") return `${base}/api`;
+  } catch {
+    /* Not an absolute URL: keep it as sent. */
+  }
+  return base;
+}
+
 let running = false;
 // The last Brave allowance seen in a response header, reported to the backend
 // once per crawl (see `noteBraveQuota`). Null when Brave was not used.
@@ -53,6 +72,7 @@ function report(payload) {
 }
 
 async function runCrawl(text, cfg) {
+  cfg.apiBase = normalizeApiBase(cfg.apiBase);
   braveQuota = null;
   report({ type: "PROGRESS", phase: "Planning queries", done: 0, total: 1 });
 

@@ -20,6 +20,7 @@ from ..schemas import (
     PipelineStage,
     UserInput,
 )
+from .brave import brave_client
 from .cache import build_key, get_cached, store_cached
 from .exa import SearchBundle, SearchResult, exa_client
 from .domain_check import check_domain
@@ -68,6 +69,48 @@ def _build_response(
     )
 
 
+def resolve_brave_key(requested_key: str | None) -> str:
+    """The Brave Search key for one run.
+
+    A key supplied by the requesting client wins (the extension lets a user bring
+    their own); otherwise the deployment's own key is used, which is how the
+    website searches without asking a visitor for anything. The key is used for
+    this request only — never stored, logged or returned.
+    """
+    return (requested_key or "").strip() or (settings.brave_api_key or "").strip()
+
+
+def _resolve_search_provider(requested: str, brave_api_key: str | None) -> str:
+    """Decide which search engine to use for this run.
+
+    ``auto`` prefers Brave, using whichever key :func:`resolve_brave_key` picked
+    (the client's own, else the deployment's); without a key it uses the
+    operator's Exa if enabled; failing that it uses the clearly labelled demo
+    search so the app still runs end to end. An explicit choice is honoured, but
+    ``brave`` without a key raises rather than silently substituting another
+    provider.
+    """
+    requested = (requested or "auto").lower()
+    has_brave = bool((brave_api_key or "").strip())
+    if requested == "brave":
+        if not has_brave:
+            from .search_errors import SearchConfigError
+
+            raise SearchConfigError(
+                "This investigation was set to use Brave Search but no API key was provided."
+            )
+        return "brave"
+    if requested == "exa":
+        return "exa"
+    if requested == "mock":
+        return "mock"
+    if has_brave:
+        return "brave"
+    if settings.exa_live:
+        return "exa"
+    return "mock"
+
+
 class _Timer:
     def __init__(self) -> None:
         self.stages: list[PipelineStage] = []
@@ -94,14 +137,26 @@ async def run_investigation(
     user_input: UserInput | None = None,
     provided_results: list[SearchResult] | None = None,
     include_analyst: bool = True,
+    brave_api_key: str | None = None,
+    search_provider: str = "auto",
 ) -> InvestigationResponse:
     """Run the full pipeline.
 
     ``user_input`` and ``provided_results`` let a client that already did stage 1
-    (extraction) and stage 3 (search/scrape — e.g. the browser extension) hand
-    the server pre-gathered data so it is not fetched or extracted twice.
+    (extraction) and stage 3 (search/scrape — e.g. a client that captured pages
+    from the active tab) hand the server pre-gathered data so it is not fetched
+    or extracted twice.
 
     ``include_analyst=False`` skips the bundled analyst read (frugal mode).
+
+    ``brave_api_key`` is the **requesting client's own** Brave Search key, used for
+    this run only and never stored. When it is absent the deployment's own key is
+    used instead (see :func:`resolve_brave_key`), which is how the website runs a
+    check without a key from the visitor. ``search_provider`` selects the engine:
+    ``"brave"`` requires a key, ``"exa"`` uses the operator's Exa key, ``"mock"``
+    forces the labelled demo data, and ``"auto"`` picks Brave when a key is
+    available, else Exa, else the demo. A provider failure raises a typed
+    :class:`SearchProviderError` so a failed search is never scored as low risk.
     """
     timer = _Timer()
     inv_id = investigation_id or uuid.uuid4().hex
@@ -162,14 +217,43 @@ async def run_investigation(
             t,
         )
     elif query_groups:
-        bundle = await exa_client.search_many(query_groups, user_input)
-        timer.mark(
-            "web_search",
-            "ok",
-            f"{len(bundle.results)} results"
-            + (" (mock/demo data)" if bundle.used_mock else " (live)"),
-            t,
-        )
+        # The client's own key if it sent one, else the deployment's. Either way
+        # it is used for this request only. A failure here raises (handled by the
+        # route) rather than degrading to a misleading score.
+        brave_key = resolve_brave_key(brave_api_key)
+        provider = _resolve_search_provider(search_provider, brave_key)
+        if provider == "brave":
+            bundle = await brave_client.search_many(query_groups, user_input, brave_key)
+            timer.mark(
+                "web_search",
+                "ok" if bundle.results else "skipped",
+                f"{len(bundle.results)} results (brave)"
+                if bundle.results
+                else "brave returned no results",
+                t,
+            )
+        elif provider == "exa":
+            bundle = await exa_client.search_many(query_groups, user_input)
+            timer.mark(
+                "web_search",
+                "ok",
+                f"{len(bundle.results)} results"
+                + (" (mock/demo data)" if bundle.used_mock else " (live)"),
+                t,
+            )
+        else:
+            bundle = SearchBundle()
+            bundle.used_mock = True
+            from .exa import mock_search
+
+            bundle.results = mock_search(query_groups, user_input)
+            bundle.queries_run = sum(len(g.queries) for g in query_groups)
+            timer.mark(
+                "web_search",
+                "ok",
+                f"{len(bundle.results)} results (mock/demo data)",
+                t,
+            )
     else:
         bundle = SearchBundle()
         timer.mark("web_search", "skipped", "no queries could be generated", t)

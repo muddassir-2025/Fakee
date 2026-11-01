@@ -1,11 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
-import {
-  detectExtension,
-  extensionIdFromStoreUrl,
-  runInvestigation,
-  type InvestigationResult,
-  type ProgressEvent,
-} from "./extensionBridge";
+import { useCallback, useState } from "react";
+import type { InvestigationResult, ProgressEvent } from "./extensionBridge";
+import { InvestigationError, investigate } from "./investigate";
 import { VerdictResult } from "./components/VerdictResult";
 import { AuthMenu } from "./components/AuthMenu";
 import { ReportAction } from "./components/ReportAction";
@@ -59,6 +54,7 @@ const NAV = [
   { href: "#how", label: "How it works" },
   { href: "#result", label: "What you get" },
   { href: "#safety", label: "Safety rules" },
+  { href: "#install", label: "Extension" },
 ];
 
 function Header({
@@ -177,7 +173,7 @@ function VerdictPreview() {
   );
 }
 
-function Hero({ onGetExtension }: { onGetExtension: () => void }) {
+function Hero({ onTryNow, onGetExtension }: { onTryNow: () => void; onGetExtension: () => void }) {
   return (
     <section id="top" className="relative overflow-hidden border-b border-line">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-gradient-to-b from-paper-deep/60 to-transparent" />
@@ -196,19 +192,21 @@ function Hero({ onGetExtension }: { onGetExtension: () => void }) {
           </p>
 
           <div className="mt-9 flex flex-wrap items-center gap-3">
+            {/* The check runs on the site itself — no install, no key of your own. */}
+            <button
+              type="button"
+              onClick={onTryNow}
+              className="rounded-full bg-signal px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-signal/90"
+            >
+              Check a posting
+            </button>
             <button
               type="button"
               onClick={onGetExtension}
-              className="rounded-full bg-signal px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-signal/90"
-            >
-              Get the browser extension
-            </button>
-            <a
-              href="#how"
               className="rounded-full border border-line-strong px-6 py-3 text-sm font-medium text-ink transition-colors hover:bg-paper-deep"
             >
-              See how it works
-            </a>
+              Get the extension (optional)
+            </button>
           </div>
 
           {/*
@@ -219,7 +217,7 @@ function Hero({ onGetExtension }: { onGetExtension: () => void }) {
           <dl className="mt-12 grid max-w-lg grid-cols-1 gap-6 border-t border-line pt-7 sm:grid-cols-3">
             <div>
               <dt className="eyebrow">Searches</dt>
-              <dd className="mt-1 font-display text-2xl font-semibold">In your browser</dd>
+              <dd className="mt-1 font-display text-2xl font-semibold">On our servers</dd>
             </div>
             <div>
               <dt className="eyebrow">Verdict</dt>
@@ -366,16 +364,16 @@ function HowItWorks() {
           <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-center">
             <div>
               <h3 className="font-display text-xl font-semibold">
-                Your browsing is the search engine
+                The search runs on our side
               </h3>
               <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted">
-                The extension performs the searches and reads the pages locally, in your own browser
-                session. That keeps the tool free to run and keeps it honest: the pages you are shown
-                as evidence are pages the tool actually read.
+                A check on this site searches with the deployment's own key, so you can investigate
+                a posting without installing anything or signing up. The pages you are shown as
+                evidence are pages the tool actually read, on that run.
               </p>
             </div>
             <div className="flex flex-wrap gap-2 lg:justify-end">
-              {["DuckDuckGo", "Optional Brave", "No API keys needed"].map((chip) => (
+              {["No install needed", "No API key needed", "Extension optional"].map((chip) => (
                 <span
                   key={chip}
                   className="rounded-full border border-line-strong px-3 py-1.5 text-xs font-medium text-ink"
@@ -461,57 +459,31 @@ function Verdict() {
 
 /* -------------------------------------------------------------- check gate */
 
-function CheckPanel({ onGetExtension }: { onGetExtension: () => void }) {
-  // The extension id is read from the store listing URL. Until the listing
-  // exists it is empty, and the panel falls back to the install gate.
-  const extensionId = extensionIdFromStoreUrl(EXTENSION.storeUrl);
-
+function CheckPanel({ onInstall }: { onInstall: () => void }) {
   const [text, setText] = useState("");
-  const [extensionReady, setExtensionReady] = useState(false);
-  const [checked, setChecked] = useState(false);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<ProgressEvent | null>(null);
   const [result, setResult] = useState<InvestigationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showGate, setShowGate] = useState(false);
+  // True when the failure is the one the extension can solve: a shared key that
+  // is missing, rejected or out of allowance.
+  const [needsOwnKey, setNeedsOwnKey] = useState(false);
   const ready = text.trim().length >= 12;
 
-  // Detect the extension once on load so the button can do the real thing.
-  useEffect(() => {
-    if (!extensionId) {
-      setChecked(true);
-      return;
-    }
-    let alive = true;
-    detectExtension(extensionId).then((found) => {
-      if (!alive) return;
-      setExtensionReady(found);
-      setChecked(true);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [extensionId]);
-
+  // The panel talks to the backend directly: no extension installed, no key of
+  // your own. The backend searches with the deployment's key for this one run.
   async function analyse() {
     setError(null);
     setResult(null);
-    setShowGate(false);
-
-    if (!extensionReady) {
-      setShowGate(true);
-      return;
-    }
+    setNeedsOwnKey(false);
 
     setRunning(true);
     setProgress({ phase: "Starting…" });
     try {
-      setResult(await runInvestigation({ extensionId, text: text.trim(), onProgress: setProgress }));
+      setResult(await investigate({ text: text.trim(), onProgress: setProgress }));
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      setError(message);
-      // If the extension vanished mid-run, offer the install route instead.
-      if (/extension|not available|respond/i.test(message)) setShowGate(true);
+      setNeedsOwnKey(err instanceof InvestigationError && err.useOwnKey);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setRunning(false);
       setProgress(null);
@@ -532,25 +504,17 @@ function CheckPanel({ onGetExtension }: { onGetExtension: () => void }) {
               Paste a posting. Watch it get investigated.
             </h2>
             <p className="mt-6 leading-relaxed text-ink-soft">
-              The searches and page reads happen inside the browser extension, on your own machine —
-              which is what keeps the tool free and keeps your posting private. The verdict comes
-              back here, with the evidence behind it.
+              Paste a posting and the backend investigates it: it generates the queries, searches the
+              web, reads the pages, and returns an explainable verdict at a consistent risk score. No
+              extension, no account, and no API key of your own.
             </p>
             <p className="mt-4 text-sm text-muted">
-              Nothing you paste here is stored by this page.
+              Nothing you paste here is stored — a plain check never creates a record.
             </p>
-            {checked && extensionId && (
-              <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-line px-3 py-1.5 text-xs text-muted">
-                <span
-                  className={cx(
-                    "h-1.5 w-1.5 rounded-full",
-                    extensionReady ? "bg-moss" : "bg-faint",
-                  )}
-                  aria-hidden="true"
-                />
-                {extensionReady ? "Extension detected" : "Extension not detected"}
-              </p>
-            )}
+            <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-line px-3 py-1.5 text-xs text-muted">
+              <span className="h-1.5 w-1.5 rounded-full bg-moss" aria-hidden="true" />
+              Ready — the site runs the search for you
+            </p>
           </div>
 
           <div className="rounded-2xl border border-line bg-paper p-7">
@@ -562,8 +526,8 @@ function CheckPanel({ onGetExtension }: { onGetExtension: () => void }) {
               value={text}
               onChange={(event) => {
                 setText(event.target.value);
-                setShowGate(false);
                 setError(null);
+                setNeedsOwnKey(false);
               }}
               rows={6}
               spellCheck={false}
@@ -589,9 +553,7 @@ function CheckPanel({ onGetExtension }: { onGetExtension: () => void }) {
                 {running ? "Investigating…" : "Analyse this posting"}
               </button>
               <span className="text-xs text-muted">
-                {running
-                  ? "Reading pages in your browser…"
-                  : "Runs in your browser, with the extension"}
+                {running ? "Running the investigation…" : "Free · nothing to install"}
               </span>
             </div>
 
@@ -622,34 +584,20 @@ function CheckPanel({ onGetExtension }: { onGetExtension: () => void }) {
             )}
 
             {error && (
-              <p
+              <div
                 role="alert"
                 className="mt-5 rounded-xl border border-crimson/30 bg-crimson/[0.05] p-4 text-sm text-crimson"
               >
-                {error}
-              </p>
-            )}
-
-            {showGate && !running && (
-              <div
-                role="status"
-                className="mt-5 rounded-xl border border-signal/30 bg-signal-soft/60 p-5"
-              >
-                <p className="text-sm font-semibold text-signal">
-                  The extension is required to analyse this.
-                </p>
-                <p className="mt-2 text-sm leading-relaxed text-ink-soft">
-                  Searches and page reads happen in your browser, which is what keeps the tool free
-                  and private. Install the extension and this button will run the investigation
-                  right here.
-                </p>
-                <button
-                  type="button"
-                  onClick={onGetExtension}
-                  className="mt-4 rounded-full bg-signal px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-signal/90"
-                >
-                  Get the extension
-                </button>
+                <p>{error}</p>
+                {needsOwnKey && (
+                  <button
+                    type="button"
+                    onClick={onInstall}
+                    className="mt-3 rounded-full bg-signal px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-signal/90"
+                  >
+                    Use the extension with your own key
+                  </button>
+                )}
               </div>
             )}
 
@@ -737,13 +685,15 @@ function Install() {
       <Container className="py-20 sm:py-28">
         <div className="grid gap-14 lg:grid-cols-[1fr_1fr] lg:gap-20">
           <div>
-            <Eyebrow>Get the extension</Eyebrow>
+            <Eyebrow>Optional: the extension</Eyebrow>
             <h2 className="mt-5 font-display text-3xl font-semibold leading-tight sm:text-4xl">
-              Install it once. Keep it open while you apply.
+              Prefer your own search key? Take the extension.
             </h2>
             <p className="mt-6 leading-relaxed text-ink-soft">
-              The extension adds a side panel to Chrome. Paste a posting, watch the investigation
-              progress, and read the verdict without leaving the page you were on.
+              Everything on this site works without it. The extension is for when you want the search
+              to run with <strong>your</strong> Brave Search key, or from your own browser while you
+              read a posting. It adds a side panel to Chrome, uses the same backend, and lets you
+              change which backend and which key it uses at any time.
             </p>
 
             {EXTENSION.storeUrl ? (
@@ -881,12 +831,15 @@ export default function App() {
           <AdminPage onSignInRequest={() => void signIn()} />
         ) : (
           <>
-            <Hero onGetExtension={scrollToInstall} />
+            <Hero
+              onTryNow={() => goToAnchor("check", "posting")}
+              onGetExtension={scrollToInstall}
+            />
             <Problem />
             <ScamTypes />
             <HowItWorks />
             <Verdict />
-            <CheckPanel onGetExtension={scrollToInstall} />
+            <CheckPanel onInstall={scrollToInstall} />
             <Safety />
             <Install />
           </>

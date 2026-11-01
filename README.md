@@ -115,14 +115,14 @@ API docs: <http://127.0.0.1:8000/docs>
 
 ### 2. Website
 
-The `frontend/` app is the **landing site** (React + Tailwind). It explains the
-problem, shows how the tool works, and routes people to the browser extension —
-the actual investigation runs client-side, not on this site.
+The `frontend/` app is the **main client** (React + Tailwind): the landing page
+explains the problem and its **Check a posting** panel runs a real investigation
+by calling the backend, which searches with the deployment's own Brave key. No
+extension and no API key of your own are needed.
 
-Once the extension is installed, the site's **Check a posting** panel runs a real
-investigation inline: the page talks to the extension over a `chrome.runtime`
-Port, the extension searches and reads pages in the user's browser, and the
-verdict is rendered on the page.
+The extension is optional. It exists for visitors who would rather run the search
+with their own key; the site still points people to it — including when the
+shared key is missing, rejected, or out of allowance.
 
 ```bash
 cd frontend
@@ -209,14 +209,14 @@ are read, with `backend/.env` taking precedence) and set what you have:
 | `DATABASE_URL`        | Neon PostgreSQL (plain `postgresql://…` is auto-normalized to asyncpg + TLS) | local SQLite is used automatically |
 | `GROQ_API_KEY`        | LLM extraction (JSON 1) + evidence structuring (JSON 2) | heuristic extraction is used |
 | `GROQ_MODEL`          | Groq model id                                     | `openai/gpt-oss-120b`              |
+| `BRAVE_API_KEY`       | The site's own Brave Search key: every check on the website searches with it | the check panel tells the visitor to install the extension and use their own key |
 | `CORS_ORIGINS`        | Comma-separated allowed frontend origins          | `http://localhost:5173`            |
 
-**Exa is optional and off by default.** The Chrome extension performs the
-searches and page reads in the user's own browser, so the product runs end to
-end with no search API. Setting `EXA_ENABLED=true` plus `EXA_API_KEY` only
-enables the server-side `POST /api/investigate` path (otherwise that endpoint
-returns deterministic mock results). The supporting code is kept for that case;
-nothing else depends on it.
+**Brave is the search engine.** The website searches with `BRAVE_API_KEY`, so a
+visitor needs nothing of their own; the extension lets a user supply their own
+key instead, which always wins over the deployment's. **Exa is optional and off
+by default:** setting `EXA_ENABLED=true` plus `EXA_API_KEY` is an alternative
+server-side engine for operators who prefer it, and nothing else depends on it.
 
 > The `/api/health` endpoint reports which integrations are live and exposes a
 > `mock_mode` flag the UI surfaces as a banner.
@@ -436,6 +436,7 @@ Build from the existing `backend/Dockerfile` (the container entrypoint runs
 `alembic upgrade head` before serving). Set:
 
 - `GROQ_API_KEY`
+- `BRAVE_API_KEY` — the site's own search key, so the website works without asking a visitor for one
 - `DATABASE_URL` — your Neon connection string (plain `postgresql://` is fine; it is normalized)
 - `CORS_ORIGINS` — include your Vercel origin, e.g. `https://<your-app>.vercel.app`
 - `ENVIRONMENT=production` — disables interactive docs and internal error details
@@ -484,7 +485,7 @@ redeploy — changing one without a rebuild does nothing:
 | Variable | Value | Effect when missing |
 | --- | --- | --- |
 | `VITE_NEON_AUTH_URL` | your Neon Auth base URL (the same value as the backend's `NEON_AUTH_BASE_URL`) | the site ships with sign-in **disabled**: no *Sign in* button in the header, reporting unavailable |
-| `VITE_API_BASE` | your backend origin, e.g. `https://<your-backend>` | the account pages call `<site>/api/...`, which a static host answers with 404 |
+| `VITE_API_BASE` | your backend origin, e.g. `https://<your-backend>` | falls back to the fixed deployment origin baked into `frontend/src/api.ts` |
 | `VITE_ADMIN_EMAIL` | the admin address | cosmetic only (the header's Admin link) — the API enforces `ADMIN_EMAILS` either way |
 
 The site still builds and serves fine without them; it just cannot sign anyone in

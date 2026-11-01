@@ -34,10 +34,14 @@ from ..schemas import (
     ReportRequest,
     ReportReviewRequest,
     ReportReviewResponse,
+    SearchKeyValidationRequest,
+    SearchKeyValidationResponse,
     UserProfile,
 )
 from ..services import budget as budget_store
+from ..services.brave import brave_client
 from ..services.exa import results_from_pages
+from ..services.search_errors import SearchProviderError
 from ..services.evidence import structure_evidence
 from ..services.extraction import extract_user_input
 from ..services.groq_client import groq_client
@@ -69,6 +73,10 @@ def _base_health() -> dict:
         "environment": settings.environment,
         "integrations": {
             "groq": settings.groq_enabled,
+            # The website searches with the deployment's own Brave key; the
+            # extension may bring a per-request user key instead. Exa remains an
+            # optional operator-owned alternative.
+            "brave": "site-key" if settings.brave_enabled else "user-key",
             "exa": settings.exa_live,
             "database": "sqlite" if settings.is_sqlite else "postgresql",
         },
@@ -148,6 +156,8 @@ async def _run_stage(
     user_input=None,
     provided_results=None,
     include_analyst: bool = True,
+    brave_api_key: str | None = None,
+    search_provider: str = "auto",
 ) -> InvestigationResponse:
     """Run the pipeline for one request stage with timeout + metrics.
 
@@ -164,6 +174,8 @@ async def _run_stage(
                 user_input=user_input,
                 provided_results=provided_results,
                 include_analyst=include_analyst,
+                brave_api_key=brave_api_key,
+                search_provider=search_provider,
             ),
             timeout=settings.investigation_timeout_seconds,
         )
@@ -172,6 +184,20 @@ async def _run_stage(
         logger.warning("%s investigation timed out", stage)
         raise HTTPException(
             status_code=504, detail="Investigation timed out. Please try again."
+        ) from exc
+    except SearchProviderError as exc:
+        # A search that could not run is *not* a clean result. Report the failure
+        # (and its kind) so the client never shows a low-risk verdict for an
+        # investigation that never happened. The message is key-free by design.
+        metrics.inc("investigations", {"stage": stage, "outcome": f"search_{exc.kind}"})
+        logger.warning("%s investigation search failed: %s", stage, exc.kind)
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={
+                "kind": exc.kind,
+                "provider": exc.provider,
+                "message": str(exc),
+            },
         ) from exc
     except Exception as exc:  # noqa: BLE001
         metrics.inc("investigations", {"stage": stage, "outcome": "error"})
@@ -208,6 +234,8 @@ async def investigate(
         session=session,
         persist=payload.persist,
         include_analyst=payload.include_analyst,
+        brave_api_key=payload.brave_api_key,
+        search_provider=payload.search_provider,
     )
 
 
@@ -232,6 +260,44 @@ async def plan_queries(payload: QueryRequest) -> QueryPlan:
 
 
 @router.post(
+    "/search/validate",
+    response_model=SearchKeyValidationResponse,
+    dependencies=[Depends(limit_queries)],
+)
+async def validate_search_key(
+    payload: SearchKeyValidationRequest,
+) -> SearchKeyValidationResponse:
+    """Test a user-supplied Brave Search key with one minimal query.
+
+    Runs the key against Brave and reports whether it works, so a user can prove
+    their key before spending a run on it. The key is used for this one request
+    and discarded; it is never logged or echoed back (the response carries only
+    the outcome and the allowance Brave reported).
+    """
+    key = payload.api_key.strip()
+    if not key:
+        raise HTTPException(status_code=422, detail="Enter a Brave Search API key.")
+    try:
+        quota = await brave_client.validate_key(key)
+    except SearchProviderError as exc:
+        # A bad key is a *successful* test with a negative answer, not an error
+        # status: the client wants the reason, not an HTTP failure.
+        return SearchKeyValidationResponse(
+            ok=False,
+            provider=exc.provider,
+            kind=exc.kind,
+            message=str(exc),
+        )
+    return SearchKeyValidationResponse(
+        ok=True,
+        message="The Brave Search API key works.",
+        limit=quota.limit if quota else None,
+        remaining=quota.remaining if quota else None,
+        reset_seconds=quota.reset_seconds if quota else None,
+    )
+
+
+@router.post(
     "/investigate/with-evidence",
     response_model=InvestigationResponse,
     dependencies=[Depends(limit_investigations)],
@@ -244,7 +310,13 @@ async def investigate_with_evidence(
     text = payload.text.strip()
     if len(text) < 3:
         raise HTTPException(status_code=422, detail="Please provide more text to investigate.")
-    provided = results_from_pages(payload.pages)
+    # When the client captured nothing but did supply a Brave key, fall through
+    # to a real server-side Brave search rather than accepting an empty capture.
+    # Without a key an empty capture stays empty (never mock papered over it).
+    if not payload.pages and (payload.brave_api_key or "").strip():
+        provided = None
+    else:
+        provided = results_from_pages(payload.pages)
     return await _run_stage(
         "extension",
         text,
@@ -253,6 +325,8 @@ async def investigate_with_evidence(
         user_input=payload.structured_input,
         provided_results=provided,
         include_analyst=payload.include_analyst,
+        brave_api_key=payload.brave_api_key,
+        search_provider=payload.search_provider,
     )
 
 

@@ -128,8 +128,8 @@ export const STEPS: Step[] = [
   },
   {
     n: "02",
-    title: "Searches from your own browser",
-    body: "The extension runs the searches and reads the result pages on your machine — never on someone else's search quota. Nothing about the posting leaves your browser until the evidence is ready.",
+    title: "Searches the wider web",
+    body: "The backend runs the queries and reads the result pages, then keeps only what bears on the claim. Nothing to install and no key to find: the search is part of the check. The extension can run the same search from your browser with your own key instead.",
     note: "Complaints · reviews · domain records · news",
   },
   {

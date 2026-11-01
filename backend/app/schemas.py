@@ -331,6 +331,9 @@ class RiskAssessment(BaseModel):
 # --------------------------------------------------------------------------
 # API payloads
 # --------------------------------------------------------------------------
+SearchProviderName = Literal["auto", "brave", "exa", "mock"]
+
+
 class InvestigationRequest(BaseModel):
     text: str = Field(min_length=3, max_length=20000)
     # Storage is opt-in: a plain search must not create a company record. Only
@@ -339,6 +342,33 @@ class InvestigationRequest(BaseModel):
     # Cost knob: the analyst read is bundled into the same Groq call (so it is
     # not an extra request), but callers who don't need it can skip the tokens.
     include_analyst: bool = True
+    # The requesting user's own Brave Search key, used for this run only. It is
+    # never persisted, never logged, and never returned. Omit it to fall back to
+    # the operator's Exa (if enabled) or the labelled demo search.
+    #
+    # Deliberately no length constraint: a validation error echoes the offending
+    # input, which would put the key in a 422 response body. The request is
+    # bounded by MAX_REQUEST_BYTES and the key is length-capped in code.
+    brave_api_key: str | None = None
+    search_provider: SearchProviderName = "auto"
+
+
+class SearchKeyValidationRequest(BaseModel):
+    """Test a user-supplied Brave Search key without running a full run."""
+
+    provider: Literal["brave"] = "brave"
+    api_key: str = Field(min_length=1, max_length=512)
+
+
+class SearchKeyValidationResponse(BaseModel):
+    ok: bool
+    provider: str = "brave"
+    kind: str = "ok"  # ok | invalid_key | quota_exhausted | rate_limited | network_error | missing_key
+    message: str
+    # The monthly allowance Brave reported, when it sent quota headers.
+    limit: int | None = None
+    remaining: int | None = None
+    reset_seconds: float | None = None
 
 
 class PipelineStage(BaseModel):
@@ -494,13 +524,18 @@ class QueryPlan(BaseModel):
 class EvidenceInvestigationRequest(BaseModel):
     text: str = Field(min_length=3, max_length=20000)
     pages: list[ProvidedPage] = Field(default_factory=list, max_length=300)
-    # Storage is opt-in: the browser extension searches without persisting, and
-    # only the explicit report action stores a company record.
+    # Storage is opt-in: a plain search without persisting, and only the explicit
+    # report action stores a company record.
     persist: bool = False
     # Optional: the UserInput returned by /queries, to skip a second extraction.
     structured_input: UserInput | None = None
     # Cost knob: skip the bundled analyst read (fetch it later via /analyst).
     include_analyst: bool = True
+    # Optional user Brave key: when supplied (and the client sent no pages) the
+    # server enriches the capture with its own Brave search. Kept optional so a
+    # client-extracted capture still works without any key.
+    brave_api_key: str | None = None
+    search_provider: SearchProviderName = "auto"
 
 
 class AnalystRequest(BaseModel):
